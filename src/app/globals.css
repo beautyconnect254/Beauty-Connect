@@ -1,26 +1,67 @@
 @import "tailwindcss";
 
 :root {
-  --background: #ffffff;
-  --foreground: #171717;
+  --background: #f8f2ea;
+  --foreground: #261915;
+  --muted: #f0e4d6;
+  --muted-foreground: #7d6658;
+  --primary: #6f4b36;
+  --primary-foreground: #fff8f0;
+  --secondary: #ebdfd2;
+  --secondary-foreground: #2e1e17;
+  --border: rgba(87, 61, 43, 0.12);
+  --ring: #c79f78;
 }
 
 @theme inline {
   --color-background: var(--background);
   --color-foreground: var(--foreground);
-  --font-sans: var(--font-geist-sans);
-  --font-mono: var(--font-geist-mono);
+  --color-muted: var(--muted);
+  --color-muted-foreground: var(--muted-foreground);
+  --color-primary: var(--primary);
+  --color-primary-foreground: var(--primary-foreground);
+  --color-secondary: var(--secondary);
+  --color-secondary-foreground: var(--secondary-foreground);
+  --color-border: var(--border);
+  --color-ring: var(--ring);
+  --font-sans: var(--font-manrope);
+  --font-mono: var(--font-manrope);
 }
 
-@media (prefers-color-scheme: dark) {
-  :root {
-    --background: #0a0a0a;
-    --foreground: #ededed;
-  }
+* {
+  box-sizing: border-box;
 }
 
 body {
   background: var(--background);
   color: var(--foreground);
-  font-family: Arial, Helvetica, sans-serif;
+  background-image:
+    radial-gradient(circle at top left, rgba(223, 195, 167, 0.45), transparent 30%),
+    radial-gradient(circle at top right, rgba(255, 255, 255, 0.95), transparent 35%),
+    linear-gradient(180deg, rgba(255, 255, 255, 0.62), rgba(248, 242, 234, 0.96));
+  font-family: var(--font-manrope), sans-serif;
+}
+
+a {
+  text-decoration: none;
+}
+
+::selection {
+  background: rgba(199, 159, 120, 0.35);
+}
+
+@layer base {
+  h1,
+  h2,
+  h3,
+  h4,
+  h5,
+  h6 {
+    font-family: var(--font-cormorant), serif;
+    text-wrap: balance;
+  }
+
+  p {
+    text-wrap: pretty;
+  }
 }
