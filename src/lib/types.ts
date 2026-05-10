@@ -1,22 +1,15 @@
-export type WorkerRole =
-  | "Hair Stylist"
-  | "Barber"
-  | "Nail Technician"
-  | "Makeup Artist"
-  | "Spa Therapist"
-  | "Lash Technician"
-  | "Braider"
-  | "Wig Specialist";
+export type WorkerRole = string;
 
 export type AvailabilityStatus =
   | "available"
   | "reserved"
-  | "hired"
-  | "unavailable";
+  | "hired";
 
 export type VerificationStatus = "pending" | "verified" | "rejected";
 
 export type WorkType = "full-time" | "part-time" | "contract" | "freelance";
+
+export type TeamWorkType = "long-term-contract" | "short-term-contract";
 
 export type VerificationDocumentStatus = "pending" | "verified" | "rejected";
 
@@ -36,7 +29,11 @@ export type StaffingAssignmentStatus =
 
 export type FeaturedStatus = "active" | "scheduled" | "expired" | "off";
 
-export type BookingStatus = "pending" | "confirmed";
+export type BookingStatus =
+  | "pending"
+  | "confirmed"
+  | "paid"
+  | "cancelled";
 
 export type BookingType = "worker" | "team";
 
@@ -47,6 +44,7 @@ export type HireStatus = "active" | "completed";
 export interface WorkerRecord {
   id: string;
   full_name: string;
+  id_number?: string;
   primary_role: WorkerRole;
   profile_photo: string;
   location: string;
@@ -104,7 +102,7 @@ export interface TeamRequestRecord {
   contact_whatsapp: string;
   location: string;
   verified_only: boolean;
-  work_type: WorkType;
+  work_type: TeamWorkType;
   urgency: TeamRequestUrgency;
   status: TeamRequestStatus;
   notes: string;
@@ -133,6 +131,23 @@ export interface AdminNoteRecord {
   staffing_assignment_id: string | null;
   author: string;
   note: string;
+  created_at: string;
+}
+
+export type AdminActivityType =
+  | "booking_confirmed"
+  | "worker_reserved"
+  | "payment_confirmed"
+  | "worker_released"
+  | "worker_status_updated";
+
+export interface AdminActivityLogRecord {
+  id: string;
+  type: AdminActivityType;
+  actor: string;
+  message: string;
+  booking_id: string | null;
+  worker_id: string | null;
   created_at: string;
 }
 
@@ -167,6 +182,8 @@ export interface BookingRecord {
   worker_ids: string[];
   team_request_id: string | null;
   notes: string;
+  payment_instructions: PaymentInstructions | null;
+  payment_verification: AdminPaymentVerification | null;
 }
 
 export interface HireRecord {
@@ -178,6 +195,25 @@ export interface HireRecord {
   hire_date: string;
   worker_ids: string[];
   payment_reference: string;
+}
+
+export interface PaymentInstructions {
+  mpesa_paybill: string;
+  mpesa_account: string;
+  bank_name: string;
+  bank_account_name: string;
+  bank_account_number: string;
+  deposit_amount: number;
+  payment_reference: string;
+  notes: string;
+}
+
+export interface AdminPaymentVerification {
+  status: "not_submitted" | "submitted" | "verified" | "rejected";
+  submitted_reference: string | null;
+  verified_by: string | null;
+  verified_at: string | null;
+  notes: string;
 }
 
 export interface WorkerPlacementSummary {
@@ -242,6 +278,13 @@ export interface WorkerCategory {
   role: WorkerRole;
   description: string;
   typical_team_use: string;
+}
+
+export interface RoleSpecialtyCatalog {
+  role: WorkerRole;
+  description: string;
+  typical_team_use: string;
+  specialties: SkillRecord[];
 }
 
 export interface DashboardMetric {

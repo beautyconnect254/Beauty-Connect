@@ -1,264 +1,220 @@
+import Link from "next/link";
 import { format, parseISO } from "date-fns";
+import { ArrowRight, ClipboardList, ShieldCheck, Users } from "lucide-react";
 
 import { DashboardMetricCard } from "@/components/admin/dashboard-metric-card";
 import { PageIntro } from "@/components/shared/page-intro";
 import { Badge } from "@/components/ui/badge";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import {
+  getAdminActivityLogs,
+  getBookings,
   getDashboardMetrics,
-  getStaffingAssignments,
-  getTeamRequests,
+  getRoleSpecialtyCatalog,
   getWorkers,
 } from "@/lib/data-access";
-import {
-  assignmentStatusLabel,
-  availabilityLabel,
-  compactRoles,
-  requestStatusLabel,
-  urgencyLabel,
-  verificationLabel,
-} from "@/lib/utils";
+import { bookingStatusLabel } from "@/lib/booking-workflow";
+import { availabilityLabel } from "@/lib/utils";
 
 export default function AdminDashboardPage() {
   const metrics = getDashboardMetrics();
-  const requests = getTeamRequests();
+  const bookings = getBookings();
   const workers = getWorkers();
-  const assignments = getStaffingAssignments();
-
-  const urgentRequests = requests.filter(
-    (request) => request.urgency !== "standard" && request.status !== "completed",
+  const activityLogs = getAdminActivityLogs();
+  const roleCatalog = getRoleSpecialtyCatalog();
+  const pendingBookings = bookings.filter((booking) => booking.status === "pending");
+  const confirmedBookings = bookings.filter(
+    (booking) => booking.status === "confirmed",
   );
-  const verificationQueue = workers.filter(
-    (worker) => worker.verification_status !== "verified",
+  const availableWorkers = workers.filter(
+    (worker) =>
+      worker.availability_status === "available" &&
+      worker.verification_status === "verified",
   );
-  const staffingPipeline = ["new", "reviewing", "staffing", "completed"] as const;
 
   return (
-    <div className="space-y-6">
+    <div className="space-y-4">
       <PageIntro
         eyebrow="Admin operations"
-        title="Run Worker Requests From One Screen"
-        description="Track worker readiness, urgent requests, assignments, and verification work."
+        title="Staffing Control Room"
+        description="Compact view of worker supply, booking stages, reservations, payment verification, and recent internal activity."
       />
 
-      <div className="grid gap-4 md:grid-cols-2 xl:grid-cols-4">
+      <div className="grid gap-3 md:grid-cols-2 xl:grid-cols-4">
         {metrics.map((metric) => (
           <DashboardMetricCard key={metric.label} metric={metric} />
         ))}
       </div>
 
-      <div className="grid gap-6 xl:grid-cols-[1.05fr_0.95fr]">
+      <div className="grid gap-4 xl:grid-cols-[0.9fr_1.1fr]">
         <Card>
-          <CardHeader>
-            <CardTitle>Staffing pipeline</CardTitle>
+          <CardHeader className="border-b border-[color:var(--border)]">
+            <div className="flex items-center gap-2">
+              <ClipboardList className="h-4 w-4" />
+              <CardTitle>Booking Work Queue</CardTitle>
+            </div>
           </CardHeader>
-          <CardContent className="space-y-4">
-            {staffingPipeline.map((status) => (
+          <CardContent className="space-y-2">
+            {[
+              {
+                label: "Pending team",
+                href: "/admin/bookings/pending/team",
+                count: pendingBookings.filter((booking) => booking.type === "team").length,
+              },
+              {
+                label: "Pending single",
+                href: "/admin/bookings/pending/single",
+                count: pendingBookings.filter((booking) => booking.type === "worker").length,
+              },
+              {
+                label: "Confirmed team",
+                href: "/admin/bookings/confirmed/team",
+                count: confirmedBookings.filter((booking) => booking.type === "team").length,
+              },
+              {
+                label: "Confirmed single",
+                href: "/admin/bookings/confirmed/single",
+                count: confirmedBookings.filter((booking) => booking.type === "worker").length,
+              },
+            ].map((item) => (
+              <Link
+                key={item.href}
+                href={item.href}
+                className="flex items-center justify-between gap-3 rounded-md border border-[color:var(--border)] bg-white px-3 py-2 hover:bg-[color:var(--muted)]"
+              >
+                <span className="text-sm font-extrabold text-[color:var(--foreground)]">
+                  {item.label}
+                </span>
+                <span className="flex items-center gap-2 text-sm font-extrabold text-[color:var(--foreground)]">
+                  {item.count}
+                  <ArrowRight className="h-4 w-4" />
+                </span>
+              </Link>
+            ))}
+          </CardContent>
+        </Card>
+
+        <Card>
+          <CardHeader className="border-b border-[color:var(--border)]">
+            <div className="flex items-center gap-2">
+              <Users className="h-4 w-4" />
+              <CardTitle>Worker Availability</CardTitle>
+            </div>
+          </CardHeader>
+          <CardContent className="grid gap-2 sm:grid-cols-3">
+            {(["available", "reserved", "hired"] as const).map((status) => (
               <div
                 key={status}
-                className="flex items-center justify-between rounded-[22px] bg-[color:var(--secondary)] px-4 py-3"
+                className="rounded-md border border-[color:var(--border)] bg-white p-3"
               >
-                <div>
-                  <p className="font-medium text-[color:var(--foreground)]">
-                    {requestStatusLabel(status)}
+                <p className="text-[11px] font-extrabold uppercase text-[color:var(--muted-foreground)]">
+                  {availabilityLabel(status)}
+                </p>
+                <p className="mt-2 text-2xl font-extrabold text-[color:var(--foreground)]">
+                  {
+                    workers.filter((worker) => worker.availability_status === status)
+                      .length
+                  }
+                </p>
+              </div>
+            ))}
+          </CardContent>
+        </Card>
+      </div>
+
+      <div className="grid gap-4 xl:grid-cols-[1.1fr_0.9fr]">
+        <Card>
+          <CardHeader className="border-b border-[color:var(--border)]">
+            <div className="flex items-center gap-2">
+              <ShieldCheck className="h-4 w-4" />
+              <CardTitle>Live Bookings</CardTitle>
+            </div>
+          </CardHeader>
+          <CardContent className="p-0">
+            <div className="hidden border-b border-[color:var(--border)] bg-[color:var(--muted)] px-3 py-2 text-[11px] font-extrabold uppercase text-[color:var(--muted-foreground)] md:grid md:grid-cols-[1.2fr_0.6fr_0.6fr_0.7fr]">
+              <span>Booking</span>
+              <span>Status</span>
+              <span>Type</span>
+              <span>Date</span>
+            </div>
+            <div className="divide-y divide-[color:var(--border)]">
+              {bookings.slice(0, 6).map((booking) => (
+                <div
+                  key={booking.id}
+                  className="grid gap-2 px-3 py-3 md:grid-cols-[1.2fr_0.6fr_0.6fr_0.7fr] md:items-center"
+                >
+                  <div>
+                    <p className="text-sm font-extrabold text-[color:var(--foreground)]">
+                      {booking.title}
+                    </p>
+                    <p className="text-xs text-[color:var(--muted-foreground)]">
+                      {booking.worker_count} worker
+                      {booking.worker_count === 1 ? "" : "s"}
+                    </p>
+                  </div>
+                  <Badge variant="outline">{bookingStatusLabel(booking.status)}</Badge>
+                  <p className="text-sm font-semibold text-[color:var(--foreground)]">
+                    {booking.type === "team" ? "Team" : "Single"}
                   </p>
                   <p className="text-sm text-[color:var(--muted-foreground)]">
-                    {
-                      requests.filter((request) => request.status === status).reduce(
-                        (total, request) => total + request.open_headcount,
-                        0,
-                      )
-                    }{" "}
-                    open seats in this stage
-                  </p>
-                </div>
-                <p className="text-2xl font-semibold text-[color:var(--foreground)]">
-                  {requests.filter((request) => request.status === status).length}
-                </p>
-              </div>
-            ))}
-          </CardContent>
-        </Card>
-
-        <Card>
-          <CardHeader>
-            <CardTitle>Urgent action queue</CardTitle>
-          </CardHeader>
-          <CardContent className="space-y-4">
-            {urgentRequests.length > 0 ? (
-              urgentRequests.map((request) => (
-                <div
-                  key={request.id}
-                  className="rounded-[24px] border border-[color:var(--border)] bg-white/70 p-4"
-                >
-                  <div className="flex flex-wrap items-center justify-between gap-3">
-                    <div>
-                      <p className="font-semibold text-[color:var(--foreground)]">
-                        {request.salon_name}
-                      </p>
-                      <p className="text-sm text-[color:var(--muted-foreground)]">
-                        {request.location} · {compactRoles(request.requested_roles)}
-                      </p>
-                    </div>
-                    <div className="flex gap-2">
-                      <Badge variant="outline">{urgencyLabel(request.urgency)}</Badge>
-                      <Badge variant="outline">{requestStatusLabel(request.status)}</Badge>
-                    </div>
-                  </div>
-                  <p className="mt-3 text-sm leading-6 text-[color:var(--muted-foreground)]">
-                    {request.open_headcount} seats still open before{" "}
-                    {format(parseISO(request.target_start_date), "MMM d, yyyy")}.
-                  </p>
-                </div>
-              ))
-            ) : (
-              <div className="rounded-[24px] border border-dashed border-[color:var(--border)] p-4 text-sm leading-6 text-[color:var(--muted-foreground)]">
-                No urgent or priority requests need intervention right now.
-              </div>
-            )}
-          </CardContent>
-        </Card>
-      </div>
-
-      <div className="grid gap-6 xl:grid-cols-[1fr_1fr]">
-        <Card>
-          <CardHeader>
-            <CardTitle>Live assignments</CardTitle>
-          </CardHeader>
-          <CardContent className="space-y-4">
-            {assignments
-              .filter(
-                (assignment) =>
-                  assignment.status === "reserved" || assignment.status === "hired",
-              )
-              .map((assignment) => (
-                <div
-                  key={assignment.id}
-                  className="rounded-[24px] border border-[color:var(--border)] bg-white/70 p-4"
-                >
-                  <div className="flex flex-wrap items-center justify-between gap-3">
-                    <div>
-                      <p className="font-semibold text-[color:var(--foreground)]">
-                        {assignment.worker.full_name}
-                      </p>
-                      <p className="text-sm text-[color:var(--muted-foreground)]">
-                        {assignment.request_role?.role ?? assignment.worker.primary_role} ·{" "}
-                        {assignment.worker.location}
-                      </p>
-                    </div>
-                    <Badge variant="outline">
-                      {assignmentStatusLabel(assignment.status)}
-                    </Badge>
-                  </div>
-                  <p className="mt-3 text-sm leading-6 text-[color:var(--muted-foreground)]">
-                    {assignment.notes}
+                    {format(parseISO(booking.booking_date), "MMM d")}
                   </p>
                 </div>
               ))}
+            </div>
           </CardContent>
         </Card>
 
         <Card>
-          <CardHeader>
-            <CardTitle>Verification queue</CardTitle>
+          <CardHeader className="border-b border-[color:var(--border)]">
+            <CardTitle>Matching Inputs</CardTitle>
           </CardHeader>
-          <CardContent className="space-y-4">
-            {verificationQueue.map((worker) => (
-              <div
-                key={worker.id}
-                className="rounded-[24px] border border-[color:var(--border)] bg-white/70 p-4"
-              >
-                <div className="flex flex-wrap items-center justify-between gap-3">
-                  <div>
-                    <p className="font-semibold text-[color:var(--foreground)]">
-                      {worker.full_name}
-                    </p>
-                    <p className="text-sm text-[color:var(--muted-foreground)]">
-                      {worker.primary_role} · {worker.location}
-                    </p>
-                  </div>
-                  <Badge
-                    variant={
-                      worker.verification_status === "pending"
-                        ? "pending"
-                        : "critical"
-                    }
-                  >
-                    {verificationLabel(worker.verification_status)}
-                  </Badge>
-                </div>
-                <p className="mt-3 text-sm leading-6 text-[color:var(--muted-foreground)]">
-                  {worker.internal_notes[0]?.note ?? "Awaiting admin verification notes."}
-                </p>
-              </div>
-            ))}
-          </CardContent>
-        </Card>
-      </div>
-
-      <div className="grid gap-6 xl:grid-cols-[0.9fr_1.1fr]">
-        <Card>
-          <CardHeader>
-            <CardTitle>Availability coverage</CardTitle>
-          </CardHeader>
-          <CardContent className="space-y-4">
-            {(["available", "reserved", "hired", "unavailable"] as const).map(
-              (status) => (
+          <CardContent className="space-y-3">
+            <div className="rounded-md border border-[color:var(--border)] bg-white p-3">
+              <p className="text-[11px] font-extrabold uppercase text-[color:var(--muted-foreground)]">
+                Available verified workers
+              </p>
+              <p className="mt-2 text-2xl font-extrabold text-[color:var(--foreground)]">
+                {availableWorkers.length}
+              </p>
+            </div>
+            <div className="grid gap-2">
+              {roleCatalog.map((role) => (
                 <div
-                  key={status}
-                  className="flex items-center justify-between rounded-[22px] bg-[color:var(--secondary)] px-4 py-3"
+                  key={role.role}
+                  className="flex items-center justify-between gap-3 rounded-md border border-[color:var(--border)] bg-white px-3 py-2"
                 >
-                  <p className="text-sm font-medium text-[color:var(--foreground)]">
-                    {availabilityLabel(status)}
-                  </p>
-                  <p className="text-lg font-semibold text-[color:var(--foreground)]">
-                    {
-                      workers.filter((worker) => worker.availability_status === status)
-                        .length
-                    }
-                  </p>
-                </div>
-              ),
-            )}
-          </CardContent>
-        </Card>
-
-        <Card>
-          <CardHeader>
-            <CardTitle>Latest internal notes</CardTitle>
-          </CardHeader>
-          <CardContent className="space-y-4">
-            {[
-              ...requests.flatMap((request) => request.internal_notes),
-              ...workers.flatMap((worker) => worker.internal_notes),
-            ]
-              .sort(
-                (left, right) =>
-                  new Date(right.created_at).getTime() -
-                  new Date(left.created_at).getTime(),
-              )
-              .slice(0, 5)
-              .map((note) => (
-                <div
-                  key={note.id}
-                  className="rounded-[24px] border border-[color:var(--border)] bg-white/70 p-4"
-                >
-                  <div className="flex flex-wrap items-center justify-between gap-2">
-                    <p className="font-medium text-[color:var(--foreground)]">
-                      {note.author}
-                    </p>
-                    <p className="text-xs uppercase tracking-[0.2em] text-[color:var(--muted-foreground)]">
-                      {format(parseISO(note.created_at), "MMM d")}
-                    </p>
-                  </div>
-                  <p className="mt-2 text-sm leading-6 text-[color:var(--muted-foreground)]">
-                    {note.note}
-                  </p>
+                  <span className="text-sm font-extrabold text-[color:var(--foreground)]">
+                    {role.role}
+                  </span>
+                  <Badge variant="outline">{role.specialties.length} specialties</Badge>
                 </div>
               ))}
+            </div>
           </CardContent>
         </Card>
       </div>
+
+      <Card>
+        <CardHeader className="border-b border-[color:var(--border)]">
+          <CardTitle>Recent Activity</CardTitle>
+        </CardHeader>
+        <CardContent className="grid gap-2 md:grid-cols-2 xl:grid-cols-3">
+          {activityLogs.slice(0, 6).map((log) => (
+            <div
+              key={log.id}
+              className="rounded-md border border-[color:var(--border)] bg-white p-3"
+            >
+              <p className="text-xs font-extrabold uppercase text-[color:var(--muted-foreground)]">
+                {format(parseISO(log.created_at), "MMM d, HH:mm")} - {log.actor}
+              </p>
+              <p className="mt-1 text-sm leading-5 text-[color:var(--foreground)]">
+                {log.message}
+              </p>
+            </div>
+          ))}
+        </CardContent>
+      </Card>
     </div>
   );
 }

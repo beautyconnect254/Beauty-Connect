@@ -23,6 +23,7 @@ import { Select } from "@/components/ui/select";
 import { Textarea } from "@/components/ui/textarea";
 import type {
   SkillRecord,
+  RoleSpecialtyCatalog,
   VerificationDocumentStatus,
   Worker,
   WorkerRole,
@@ -31,7 +32,7 @@ import { availabilityLabel, cn, verificationLabel } from "@/lib/utils";
 
 interface AdminWorkersClientProps {
   initialWorkers: Worker[];
-  roles: WorkerRole[];
+  roleCatalog: RoleSpecialtyCatalog[];
   locations: string[];
   skillCatalog: SkillRecord[];
 }
@@ -80,13 +81,13 @@ const steps = [
   { id: "availability", label: "Availability", icon: FileText },
 ] as const;
 
-function createDraft(worker?: Worker): WorkerDraft {
+function createDraft(worker?: Worker, defaultRole: WorkerRole = "Hair Stylist"): WorkerDraft {
   const primaryReference = worker?.reference_contacts[0];
 
   return {
     id: worker?.id,
     full_name: worker?.full_name ?? "",
-    primary_role: worker?.primary_role ?? "Hair Stylist",
+    primary_role: worker?.primary_role ?? defaultRole,
     profile_photo: worker?.profile_photo ?? "",
     location: worker?.location ?? "Nairobi",
     years_of_experience: String(worker?.years_of_experience ?? 2),
@@ -149,15 +150,23 @@ function stepComplete(stepId: (typeof steps)[number]["id"], draft: WorkerDraft) 
 
 export function AdminWorkersClient({
   initialWorkers,
-  roles,
+  roleCatalog: initialRoleCatalog,
   locations,
   skillCatalog,
 }: AdminWorkersClientProps) {
   const [workers, setWorkers] = useState(initialWorkers);
+  const [roleCatalog, setRoleCatalog] = useState(initialRoleCatalog);
+  const [catalogRoleName, setCatalogRoleName] = useState("");
+  const [catalogSpecialtyName, setCatalogSpecialtyName] = useState("");
+  const [selectedCatalogRole, setSelectedCatalogRole] = useState(
+    initialRoleCatalog[0]?.role ?? "Hair Stylist",
+  );
   const [selectedId, setSelectedId] = useState<string | null>(
     initialWorkers[0]?.id ?? null,
   );
-  const [draft, setDraft] = useState(createDraft(initialWorkers[0]));
+  const [draft, setDraft] = useState(
+    createDraft(initialWorkers[0], initialRoleCatalog[0]?.role),
+  );
   const [portfolioPreviews, setPortfolioPreviews] = useState<string[]>([]);
   const [stepIndex, setStepIndex] = useState(0);
   const [lastSavedLabel, setLastSavedLabel] = useState("");
@@ -170,15 +179,23 @@ export function AdminWorkersClient({
   }, [portfolioPreviews]);
 
   const selectedWorker = workers.find((worker) => worker.id === selectedId) ?? null;
+  const roles = useMemo(() => roleCatalog.map((item) => item.role), [roleCatalog]);
+  const liveSkillCatalog = useMemo(
+    () =>
+      roleCatalog.length > 0
+        ? roleCatalog.flatMap((item) => item.specialties)
+        : skillCatalog,
+    [roleCatalog, skillCatalog],
+  );
   const skillsForRole = useMemo(
-    () => skillCatalog.filter((skill) => skill.role === draft.primary_role),
-    [draft.primary_role, skillCatalog],
+    () => liveSkillCatalog.filter((skill) => skill.role === draft.primary_role),
+    [draft.primary_role, liveSkillCatalog],
   );
   const completionCount = steps.filter((step) => stepComplete(step.id, draft)).length;
 
   function switchToWorker(worker: Worker) {
     setSelectedId(worker.id);
-    setDraft(createDraft(worker));
+    setDraft(createDraft(worker, roles[0]));
     setPortfolioPreviews([]);
     setStepIndex(0);
     setLastSavedLabel("");
@@ -186,7 +203,7 @@ export function AdminWorkersClient({
 
   function resetToNew() {
     setSelectedId(null);
-    setDraft(createDraft());
+    setDraft(createDraft(undefined, roles[0]));
     setPortfolioPreviews([]);
     setStepIndex(0);
     setLastSavedLabel("");
@@ -199,6 +216,54 @@ export function AdminWorkersClient({
         ? current.selected_skill_ids.filter((item) => item !== skillId)
         : [...current.selected_skill_ids, skillId],
     }));
+  }
+
+  function addCatalogRole() {
+    const role = catalogRoleName.trim();
+
+    if (!role || roleCatalog.some((item) => item.role.toLowerCase() === role.toLowerCase())) {
+      return;
+    }
+
+    setRoleCatalog((current) => [
+      ...current,
+      {
+        role,
+        description: "",
+        typical_team_use: "",
+        specialties: [],
+      },
+    ]);
+    setSelectedCatalogRole(role);
+    setCatalogRoleName("");
+  }
+
+  function addCatalogSpecialty() {
+    const name = catalogSpecialtyName.trim();
+
+    if (!name) {
+      return;
+    }
+
+    const id = `skill-${selectedCatalogRole.toLowerCase().replace(/[^a-z0-9]+/g, "-")}-${name
+      .toLowerCase()
+      .replace(/[^a-z0-9]+/g, "-")}`;
+
+    setRoleCatalog((current) =>
+      current.map((role) =>
+        role.role === selectedCatalogRole
+          ? {
+              ...role,
+              specialties: role.specialties.some(
+                (specialty) => specialty.name.toLowerCase() === name.toLowerCase(),
+              )
+                ? role.specialties
+                : [...role.specialties, { id, name, role: role.role }],
+            }
+          : role,
+      ),
+    );
+    setCatalogSpecialtyName("");
   }
 
   function addDocument() {
@@ -250,7 +315,7 @@ export function AdminWorkersClient({
       `${draft.full_name.toLowerCase().replace(/[^a-z0-9]+/g, "-")}-${Date.now().toString(36)}`;
     const existingWorker = workers.find((worker) => worker.id === id);
     const portfolioUrls = [...draft.portfolio_urls, ...portfolioPreviews];
-    const selectedSkills = skillCatalog.filter((skill) =>
+    const selectedSkills = liveSkillCatalog.filter((skill) =>
       draft.selected_skill_ids.includes(skill.id),
     );
     const canListPublicly =
@@ -335,7 +400,7 @@ export function AdminWorkersClient({
       });
 
       setSelectedId(id);
-      setDraft(createDraft(nextWorker));
+      setDraft(createDraft(nextWorker, roles[0]));
       setPortfolioPreviews([]);
       setLastSavedLabel(`Saved ${nextWorker.full_name} to the staffing roster.`);
     });
@@ -407,6 +472,62 @@ export function AdminWorkersClient({
               </div>
             </button>
           ))}
+
+          <div className="space-y-3 rounded-[24px] border border-[color:var(--border)] bg-white/70 p-4">
+            <div>
+              <p className="font-semibold text-[color:var(--foreground)]">
+                Role specialities
+              </p>
+              <p className="mt-1 text-sm leading-5 text-[color:var(--muted-foreground)]">
+                This catalog powers team requests, filters, worker creation, and
+                profiles.
+              </p>
+            </div>
+
+            <div className="grid gap-2">
+              <Select
+                value={selectedCatalogRole}
+                onChange={(event) => setSelectedCatalogRole(event.target.value)}
+              >
+                {roles.map((role) => (
+                  <option key={role} value={role}>
+                    {role}
+                  </option>
+                ))}
+              </Select>
+              <div className="flex flex-wrap gap-1.5">
+                {roleCatalog
+                  .find((role) => role.role === selectedCatalogRole)
+                  ?.specialties.map((skill) => (
+                    <Badge key={skill.id} variant="outline" className="normal-case">
+                      {skill.name}
+                    </Badge>
+                  ))}
+              </div>
+            </div>
+
+            <div className="grid gap-2">
+              <Input
+                value={catalogRoleName}
+                onChange={(event) => setCatalogRoleName(event.target.value)}
+                placeholder="New main role"
+              />
+              <Button variant="secondary" size="sm" onClick={addCatalogRole}>
+                Add role
+              </Button>
+            </div>
+
+            <div className="grid gap-2">
+              <Input
+                value={catalogSpecialtyName}
+                onChange={(event) => setCatalogSpecialtyName(event.target.value)}
+                placeholder="New speciality"
+              />
+              <Button variant="secondary" size="sm" onClick={addCatalogSpecialty}>
+                Add speciality
+              </Button>
+            </div>
+          </div>
         </CardContent>
       </Card>
 
@@ -894,7 +1015,6 @@ export function AdminWorkersClient({
                     <option value="available">Available</option>
                     <option value="reserved">Reserved</option>
                     <option value="hired">Hired</option>
-                    <option value="unavailable">Unavailable</option>
                   </Select>
                 </div>
                 <div className="space-y-2">

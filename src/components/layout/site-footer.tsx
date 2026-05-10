@@ -9,7 +9,7 @@ export function SiteFooter() {
             Beauty Connect
           </p>
           <p className="max-w-xl text-sm leading-5 text-[color:var(--muted-foreground)]">
-            Salon Staffing Solutions for beauty businesses in Kenya and Africa.
+            Salon Staffing Solutions for beauty businesses in Kenya.
           </p>
         </div>
 

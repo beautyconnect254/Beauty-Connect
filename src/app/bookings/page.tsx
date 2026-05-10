@@ -14,17 +14,12 @@ export default function BookingsPage() {
       <div className="mx-auto w-full max-w-5xl space-y-4 px-3 py-5 sm:px-6 lg:px-8 lg:py-8">
         <PageIntro
           eyebrow="Bookings"
-          title="Worker And Team Bookings"
-          description="Pending requests are checked by Beauty Connect. Confirmed bookings are ready for deposit payment."
+          title="Reservation Pipeline"
+          description="Pending bookings are reviewed by Beauty Connect. Confirmed bookings show payment instructions; contacts unlock only in Hires."
           actions={
-            <>
-              <Link href="/team-builder" className={buttonVariants({ variant: "default" })}>
-                Build Team
-              </Link>
-              <Link href="/workers" className={buttonVariants({ variant: "outline" })}>
-                Single Booking
-              </Link>
-            </>
+            <Link href="/team-builder" className={buttonVariants({ variant: "default" })}>
+              Build Team
+            </Link>
           }
         />
 

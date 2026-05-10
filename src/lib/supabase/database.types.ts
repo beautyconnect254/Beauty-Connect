@@ -13,6 +13,7 @@ export interface Database {
         Row: {
           id: string;
           full_name: string;
+          id_number: string;
           primary_role: string;
           profile_photo: string;
           location: string;
@@ -35,6 +36,35 @@ export interface Database {
           primary_role: string;
         };
         Update: Partial<Database["public"]["Tables"]["workers"]["Row"]>;
+      };
+      worker_roles: {
+        Row: {
+          id: string;
+          name: string;
+          description: string;
+          typical_team_use: string;
+          created_at: string;
+          updated_at: string;
+        };
+        Insert: Partial<Database["public"]["Tables"]["worker_roles"]["Row"]> & {
+          id: string;
+          name: string;
+        };
+        Update: Partial<Database["public"]["Tables"]["worker_roles"]["Row"]>;
+      };
+      role_specialties: {
+        Row: {
+          id: string;
+          role_id: string;
+          name: string;
+          created_at: string;
+        };
+        Insert: Partial<Database["public"]["Tables"]["role_specialties"]["Row"]> & {
+          id: string;
+          role_id: string;
+          name: string;
+        };
+        Update: Partial<Database["public"]["Tables"]["role_specialties"]["Row"]>;
       };
       worker_references: {
         Row: {
@@ -161,6 +191,95 @@ export interface Database {
           Database["public"]["Tables"]["team_request_role_specialties"]["Row"]
         >;
       };
+      bookings: {
+        Row: {
+          id: string;
+          type: string;
+          title: string;
+          status: string;
+          payment_status: string;
+          booking_date: string;
+          submitted_at: string;
+          team_request_id: string | null;
+          notes: string;
+          payment_instructions: Json | null;
+          updated_at: string;
+        };
+        Insert: Partial<Database["public"]["Tables"]["bookings"]["Row"]> & {
+          id: string;
+          type: string;
+          title: string;
+          booking_date: string;
+        };
+        Update: Partial<Database["public"]["Tables"]["bookings"]["Row"]>;
+      };
+      booking_workers: {
+        Row: {
+          booking_id: string;
+          worker_id: string;
+          created_at: string;
+        };
+        Insert: Partial<Database["public"]["Tables"]["booking_workers"]["Row"]> & {
+          booking_id: string;
+          worker_id: string;
+        };
+        Update: Partial<Database["public"]["Tables"]["booking_workers"]["Row"]>;
+      };
+      payment_verifications: {
+        Row: {
+          id: string;
+          booking_id: string;
+          status: string;
+          submitted_reference: string | null;
+          verified_by: string | null;
+          verified_at: string | null;
+          notes: string;
+          created_at: string;
+          updated_at: string;
+        };
+        Insert: Partial<
+          Database["public"]["Tables"]["payment_verifications"]["Row"]
+        > & {
+          id: string;
+          booking_id: string;
+        };
+        Update: Partial<
+          Database["public"]["Tables"]["payment_verifications"]["Row"]
+        >;
+      };
+      hires: {
+        Row: {
+          id: string;
+          booking_id: string;
+          title: string;
+          status: string;
+          payment_status: string;
+          hire_date: string;
+          payment_reference: string;
+          created_at: string;
+          updated_at: string;
+        };
+        Insert: Partial<Database["public"]["Tables"]["hires"]["Row"]> & {
+          id: string;
+          booking_id: string;
+          title: string;
+          hire_date: string;
+          payment_reference: string;
+        };
+        Update: Partial<Database["public"]["Tables"]["hires"]["Row"]>;
+      };
+      hire_workers: {
+        Row: {
+          hire_id: string;
+          worker_id: string;
+          created_at: string;
+        };
+        Insert: Partial<Database["public"]["Tables"]["hire_workers"]["Row"]> & {
+          hire_id: string;
+          worker_id: string;
+        };
+        Update: Partial<Database["public"]["Tables"]["hire_workers"]["Row"]>;
+      };
       verification_documents: {
         Row: {
           id: string;
@@ -216,6 +335,28 @@ export interface Database {
           note: string;
         };
         Update: Partial<Database["public"]["Tables"]["admin_notes"]["Row"]>;
+      };
+      admin_activity_logs: {
+        Row: {
+          id: string;
+          type: string;
+          actor: string;
+          message: string;
+          booking_id: string | null;
+          worker_id: string | null;
+          created_at: string;
+        };
+        Insert: Partial<
+          Database["public"]["Tables"]["admin_activity_logs"]["Row"]
+        > & {
+          id: string;
+          type: string;
+          actor: string;
+          message: string;
+        };
+        Update: Partial<
+          Database["public"]["Tables"]["admin_activity_logs"]["Row"]
+        >;
       };
     };
   };

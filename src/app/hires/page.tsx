@@ -12,7 +12,7 @@ export default function HiresPage() {
         <PageIntro
           eyebrow="Hires"
           title="Paid Active Hires"
-          description="Workers and teams with confirmed payment and active hire status."
+          description="Paid worker and team hires with contact actions unlocked."
         />
 
         {hires.length > 0 ? (

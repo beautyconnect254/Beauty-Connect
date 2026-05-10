@@ -3,16 +3,21 @@ import { notFound } from "next/navigation";
 import { format, parseISO } from "date-fns";
 import { ArrowLeft, CalendarDays, CreditCard, Users } from "lucide-react";
 
+import { PaymentInstructionsCard } from "@/components/bookings/payment-instructions-card";
 import {
-  bookingStatusLabel,
-  paymentStatusLabel,
-} from "@/components/bookings/booking-card";
+  BookingStatusBadge,
+  PaymentStatusBadge,
+} from "@/components/bookings/workflow-badges";
 import { SiteShell } from "@/components/layout/site-shell";
 import { WorkerCard } from "@/components/workers/worker-card";
-import { Badge } from "@/components/ui/badge";
 import { buttonVariants } from "@/components/ui/button";
 import { Card, CardContent } from "@/components/ui/card";
 import { getBookingById, getBookings } from "@/lib/data-access";
+import {
+  bookingRequiresPayment,
+  bookingStatusDescription,
+  paymentStatusLabel,
+} from "@/lib/booking-workflow";
 import { cn } from "@/lib/utils";
 
 interface BookingDetailPageProps {
@@ -54,12 +59,8 @@ export default async function BookingDetailPage({ params }: BookingDetailPagePro
                 </h1>
               </div>
               <div className="flex flex-wrap gap-2">
-                <Badge className="bg-purple-100 text-purple-800 normal-case">
-                  {bookingStatusLabel(booking.status)}
-                </Badge>
-                <Badge className="bg-emerald-100 text-emerald-800 normal-case">
-                  {paymentStatusLabel(booking.payment_status)}
-                </Badge>
+                <BookingStatusBadge status={booking.status} />
+                <PaymentStatusBadge status={booking.payment_status} />
               </div>
             </div>
 
@@ -94,8 +95,17 @@ export default async function BookingDetailPage({ params }: BookingDetailPagePro
             <p className="rounded-md border border-[color:var(--border)] bg-white p-3 text-sm font-semibold leading-5 text-[color:var(--muted-foreground)]">
               {booking.notes}
             </p>
+
+            <p className="rounded-md bg-amber-50 px-3 py-2 text-xs font-bold leading-5 text-amber-900">
+              {bookingStatusDescription(booking.status)} Worker contact details stay locked
+              until payment is verified and the booking moves to Hires.
+            </p>
           </CardContent>
         </Card>
+
+        {bookingRequiresPayment(booking) && booking.payment_instructions ? (
+          <PaymentInstructionsCard instructions={booking.payment_instructions} />
+        ) : null}
 
         <section className="space-y-3">
           <h2 className="text-lg font-extrabold text-[color:var(--foreground)]">

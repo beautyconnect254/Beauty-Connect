@@ -142,7 +142,6 @@ export function WorkersExplorer({
             <option value="available">Available</option>
             <option value="reserved">Reserved</option>
             <option value="hired">Hired</option>
-            <option value="unavailable">Unavailable</option>
           </Select>
           <Select
             value={minExperience}

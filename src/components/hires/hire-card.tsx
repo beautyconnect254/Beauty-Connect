@@ -1,10 +1,13 @@
 import Link from "next/link";
 import { format, parseISO } from "date-fns";
-import { CalendarCheck, CreditCard, Users } from "lucide-react";
+import { CalendarCheck, CreditCard, MessageCircle, Users } from "lucide-react";
 
 import { Badge } from "@/components/ui/badge";
+import { buttonVariants } from "@/components/ui/button";
 import { Card, CardContent } from "@/components/ui/card";
 import type { Hire } from "@/lib/types";
+import { workerWhatsappHref } from "@/lib/booking-workflow";
+import { cn } from "@/lib/utils";
 
 interface HireCardProps {
   hire: Hire;
@@ -12,9 +15,9 @@ interface HireCardProps {
 
 export function HireCard({ hire }: HireCardProps) {
   const workerNames = hire.workers.map((worker) => worker.full_name).join(", ");
+  const primaryWorker = hire.workers[0];
 
   return (
-    <Link href={`/hires/${hire.id}`} className="block">
       <Card className="transition hover:border-emerald-400 hover:shadow-md">
         <CardContent className="space-y-3 p-3">
           <div className="flex items-start justify-between gap-3">
@@ -47,10 +50,29 @@ export function HireCard({ hire }: HireCardProps) {
           </div>
 
           <div className="rounded-md bg-emerald-50 px-2 py-1.5 text-[11px] font-bold text-emerald-800">
-            Payment confirmed
+            Payment confirmed. Contacts unlocked.
+          </div>
+
+          <div className="grid grid-cols-2 gap-2">
+            <Link
+              href={`/hires/${hire.id}`}
+              className={cn(buttonVariants({ variant: "outline", size: "sm" }), "w-full")}
+            >
+              Details
+            </Link>
+            {primaryWorker ? (
+              <Link
+                href={workerWhatsappHref(primaryWorker)}
+                target="_blank"
+                rel="noreferrer"
+                className={cn(buttonVariants({ variant: "secondary", size: "sm" }), "w-full")}
+              >
+                <MessageCircle className="h-4 w-4" />
+                WhatsApp
+              </Link>
+            ) : null}
           </div>
         </CardContent>
       </Card>
-    </Link>
   );
 }

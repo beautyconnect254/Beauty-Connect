@@ -1,14 +1,43 @@
+insert into public.worker_roles (id, name, description, typical_team_use)
+values
+  ('role-hair-stylist', 'Hair Stylist', 'Color, treatments, silk presses, and daily salon styling.', 'Main floor coverage for cuts, color, washing, and styling.'),
+  ('role-barber', 'Barber', 'Fade, beard, and grooming workers for busy appointment books.', 'Fast chair coverage for grooming and walk-in schedules.'),
+  ('role-nail-technician', 'Nail Technician', 'Gel, acrylic, nail art, and mani-pedi workers.', 'Useful for repeat clients, bridal prep, and add-on services.'),
+  ('role-makeup-artist', 'Makeup Artist', 'Bridal, event, and photoshoot makeup workers.', 'Bridal weekends, events, launches, and photoshoots.'),
+  ('role-spa-therapist', 'Spa Therapist', 'Massage, body treatment, and wellness workers.', 'Treatment-room coverage, package services, and spa bookings.'),
+  ('role-lash-technician', 'Lash Technician', 'Classic, hybrid, and volume lash workers.', 'Lash sets, refill appointments, and add-on services.'),
+  ('role-braider', 'Braider', 'Braids, twists, and natural hair care workers.', 'Protective styles and busy seasonal bookings.')
+on conflict (id) do nothing;
+
+insert into public.role_specialties (id, role_id, name)
+values
+  ('rs-color-correction', 'role-hair-stylist', 'Color Correction'),
+  ('rs-silk-press', 'role-hair-stylist', 'Silk Press'),
+  ('rs-fades', 'role-barber', 'Fade Specialist'),
+  ('rs-bald', 'role-barber', 'Bald Specialist'),
+  ('rs-kids-cuts', 'role-barber', 'Kids Cuts'),
+  ('rs-gel-x', 'role-nail-technician', 'Gel-X Extensions'),
+  ('rs-nail-art', 'role-nail-technician', 'Luxury Nail Art'),
+  ('rs-bridal-makeup', 'role-makeup-artist', 'Bridal Makeup'),
+  ('rs-editorial', 'role-makeup-artist', 'Editorial Looks'),
+  ('rs-aromatherapy', 'role-spa-therapist', 'Aromatherapy'),
+  ('rs-classic-lash', 'role-lash-technician', 'Classic Lash Sets'),
+  ('rs-knotless', 'role-braider', 'Knotless Braids')
+on conflict (id) do nothing;
+
 insert into public.skills (id, name, role)
 values
   ('skill-color-correction', 'Color Correction', 'Hair Stylist'),
   ('skill-silk-press', 'Silk Press', 'Hair Stylist'),
-  ('skill-fades', 'Skin Fades', 'Barber'),
-  ('skill-beards', 'Beard Sculpting', 'Barber'),
+  ('skill-fades', 'Fade Specialist', 'Barber'),
+  ('skill-beards', 'Bald Specialist', 'Barber'),
+  ('skill-grooming', 'Kids Cuts', 'Barber'),
   ('skill-gel-x', 'Gel-X Extensions', 'Nail Technician'),
   ('skill-nail-art', 'Luxury Nail Art', 'Nail Technician'),
   ('skill-bridal-makeup', 'Bridal Makeup', 'Makeup Artist'),
   ('skill-editorial', 'Editorial Looks', 'Makeup Artist'),
   ('skill-aromatherapy', 'Aromatherapy', 'Spa Therapist'),
+  ('skill-classic-lash', 'Classic Lash Sets', 'Lash Technician'),
   ('skill-knotless', 'Knotless Braids', 'Braider')
 on conflict (id) do nothing;
 
@@ -194,7 +223,7 @@ values
     '+254 745 111 777',
     'Nairobi',
     true,
-    'full-time',
+    'long-term-contract',
     'priority',
     'staffing',
     'Second branch launch with premium floor expectations and immediate opening-week needs.',
@@ -209,7 +238,7 @@ values
     '+254 709 880 191',
     'Nairobi',
     true,
-    'contract',
+    'short-term-contract',
     'urgent',
     'reviewing',
     'Needs barbers for premium membership traffic and faster chair turnaround.',
@@ -224,7 +253,7 @@ values
     '+254 731 144 822',
     'Mombasa',
     true,
-    'freelance',
+    'short-term-contract',
     'priority',
     'new',
     'Peak tourism season support for protective styling and bridal demand.',
@@ -336,6 +365,73 @@ values
   )
 on conflict (id) do nothing;
 
+insert into public.bookings (
+  id,
+  type,
+  title,
+  status,
+  payment_status,
+  booking_date,
+  submitted_at,
+  team_request_id,
+  notes,
+  payment_instructions
+)
+values
+  (
+    'booking-luna-team',
+    'team',
+    'Luna House opening team',
+    'confirmed',
+    'deposit_due',
+    '2026-05-28',
+    '2026-05-08T10:15:00.000Z',
+    'req-luna-house',
+    'Two workers confirmed. Deposit is needed before start date.',
+    '{"mpesa_paybill":"400200","mpesa_account":"BC-LUNA-TEAM","bank_name":"Beauty Connect Operations Bank","bank_account_name":"Beauty Connect Staffing","bank_account_number":"0123456789","deposit_amount":10000,"payment_reference":"BC-LUNA-TEAM","notes":"Pay the deposit after confirmation. Beauty Connect verifies manually before team contacts unlock."}'::jsonb
+  ),
+  (
+    'booking-baroque-barbers',
+    'team',
+    'Baroque barber team',
+    'pending',
+    'not_due',
+    '2026-06-05',
+    '2026-05-09T08:30:00.000Z',
+    'req-baroque-grooming',
+    'Beauty Connect is checking final worker availability.',
+    null
+  )
+on conflict (id) do nothing;
+
+insert into public.booking_workers (booking_id, worker_id)
+values
+  ('booking-luna-team', 'amara-njeri'),
+  ('booking-luna-team', 'nadia-aziz'),
+  ('booking-baroque-barbers', 'baraka-otieno')
+on conflict (booking_id, worker_id) do nothing;
+
+insert into public.payment_verifications (
+  id,
+  booking_id,
+  status,
+  submitted_reference,
+  verified_by,
+  verified_at,
+  notes
+)
+values
+  (
+    'verify-luna-team',
+    'booking-luna-team',
+    'not_submitted',
+    null,
+    null,
+    null,
+    'Waiting for client payment reference.'
+  )
+on conflict (id) do nothing;
+
 insert into public.admin_notes (
   id,
   worker_id,
@@ -372,5 +468,35 @@ values
     'Grace',
     'Reservation confirmed after compensation band aligned.',
     '2026-05-05T11:15:00.000Z'
+  )
+on conflict (id) do nothing;
+
+insert into public.admin_activity_logs (
+  id,
+  type,
+  actor,
+  message,
+  booking_id,
+  worker_id,
+  created_at
+)
+values
+  (
+    'activity-luna-confirmed',
+    'booking_confirmed',
+    'Grace',
+    'Confirmed Luna House opening team and moved workers to reserved.',
+    'booking-luna-team',
+    null,
+    '2026-05-08T10:20:00.000Z'
+  ),
+  (
+    'activity-amara-reserved',
+    'worker_reserved',
+    'Grace',
+    'Reserved Amara Njeri for Luna House opening team.',
+    'booking-luna-team',
+    'amara-njeri',
+    '2026-05-08T10:22:00.000Z'
   )
 on conflict (id) do nothing;

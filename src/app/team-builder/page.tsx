@@ -1,12 +1,7 @@
 import { SiteShell } from "@/components/layout/site-shell";
 import { PageIntro } from "@/components/shared/page-intro";
 import { TeamBuilderClient } from "@/components/team-builder/team-builder-client";
-import {
-  getLocations,
-  getSkills,
-  getWorkerCategories,
-  getWorkers,
-} from "@/lib/data-access";
+import { getRoleSpecialtyCatalog } from "@/lib/data-access";
 
 export default function TeamBuilderPage() {
   return (
@@ -15,15 +10,10 @@ export default function TeamBuilderPage() {
         <PageIntro
           eyebrow="Bookings"
           title="Build Your Salon Team"
-          description="Choose roles, experience, location, and worker skills."
+          description="Share salon details, choose roles, and send the request for review."
         />
 
-        <TeamBuilderClient
-          workers={getWorkers()}
-          categories={getWorkerCategories()}
-          locations={getLocations()}
-          skills={getSkills()}
-        />
+        <TeamBuilderClient roleCatalog={getRoleSpecialtyCatalog()} />
       </div>
     </SiteShell>
   );

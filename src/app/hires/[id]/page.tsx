@@ -3,8 +3,8 @@ import { notFound } from "next/navigation";
 import { format, parseISO } from "date-fns";
 import { ArrowLeft, CalendarCheck, CreditCard, Users } from "lucide-react";
 
+import { HireContactCard } from "@/components/hires/hire-contact-card";
 import { SiteShell } from "@/components/layout/site-shell";
-import { WorkerCard } from "@/components/workers/worker-card";
 import { Badge } from "@/components/ui/badge";
 import { buttonVariants } from "@/components/ui/button";
 import { Card, CardContent } from "@/components/ui/card";
@@ -50,7 +50,7 @@ export default async function HireDetailPage({ params }: HireDetailPageProps) {
                 </h1>
               </div>
               <Badge className="bg-emerald-100 text-emerald-800 normal-case">
-                Payment confirmed
+                Contacts unlocked
               </Badge>
             </div>
 
@@ -84,11 +84,11 @@ export default async function HireDetailPage({ params }: HireDetailPageProps) {
 
         <section className="space-y-3">
           <h2 className="text-lg font-extrabold text-[color:var(--foreground)]">
-            Active Workers
+            Worker Contacts
           </h2>
-          <div className="grid grid-cols-2 gap-2.5 sm:grid-cols-3 lg:grid-cols-4">
+          <div className="grid gap-2.5 lg:grid-cols-2">
             {hire.workers.map((worker) => (
-              <WorkerCard compact key={worker.id} worker={worker} />
+              <HireContactCard key={worker.id} worker={worker} />
             ))}
           </div>
         </section>

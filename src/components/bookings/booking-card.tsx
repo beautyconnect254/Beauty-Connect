@@ -1,50 +1,26 @@
 import Link from "next/link";
 import { format, parseISO } from "date-fns";
-import { CalendarDays, CreditCard, Users } from "lucide-react";
+import { CalendarDays, ClipboardList, CreditCard, Users } from "lucide-react";
 
-import { Badge } from "@/components/ui/badge";
+import { BookingStatusBadge } from "@/components/bookings/workflow-badges";
 import { Card, CardContent } from "@/components/ui/card";
-import type { Booking, BookingStatus, PaymentStatus } from "@/lib/types";
+import type { Booking } from "@/lib/types";
+import {
+  bookingStatusDescription,
+  paymentStatusClass,
+  paymentStatusLabel,
+} from "@/lib/booking-workflow";
 import { cn } from "@/lib/utils";
 
 interface BookingCardProps {
   booking: Booking;
+  interactive?: boolean;
 }
 
-export function bookingStatusLabel(status: BookingStatus) {
-  return status === "confirmed" ? "Confirmed" : "Pending";
-}
-
-export function paymentStatusLabel(status: PaymentStatus) {
-  switch (status) {
-    case "deposit_due":
-      return "Deposit due";
-    case "deposit_paid":
-      return "Deposit paid";
-    case "paid":
-      return "Paid";
-    default:
-      return "Not due";
-  }
-}
-
-function statusClass(status: BookingStatus) {
-  return status === "confirmed"
-    ? "bg-emerald-100 text-emerald-800"
-    : "bg-purple-100 text-purple-800";
-}
-
-function paymentClass(status: PaymentStatus) {
-  return status === "deposit_due"
-    ? "bg-amber-100 text-amber-800"
-    : "bg-slate-100 text-slate-700";
-}
-
-export function BookingCard({ booking }: BookingCardProps) {
+export function BookingCard({ booking, interactive = true }: BookingCardProps) {
   const workerNames = booking.workers.map((worker) => worker.full_name).join(", ");
 
-  return (
-    <Link href={`/bookings/${booking.id}`} className="block">
+  const content = (
       <Card className="transition hover:border-emerald-400 hover:shadow-md">
         <CardContent className="space-y-3 p-3">
           <div className="flex items-start justify-between gap-3">
@@ -56,9 +32,7 @@ export function BookingCard({ booking }: BookingCardProps) {
                 {workerNames || "No workers assigned yet"}
               </p>
             </div>
-            <Badge className={cn("shrink-0 normal-case", statusClass(booking.status))}>
-              {bookingStatusLabel(booking.status)}
-            </Badge>
+            <BookingStatusBadge status={booking.status} />
           </div>
 
           <div className="grid grid-cols-3 gap-2 text-[11px] font-bold text-[color:var(--muted-foreground)]">
@@ -79,15 +53,31 @@ export function BookingCard({ booking }: BookingCardProps) {
           </div>
 
           <div className="flex items-center justify-between gap-2">
-            <span className="rounded-full bg-[color:var(--muted)] px-2 py-0.5 text-[10px] font-bold uppercase text-[color:var(--muted-foreground)]">
-              {booking.type === "team" ? "Team booking" : "Single booking"}
+            <span className="flex min-w-0 items-center gap-1 rounded-full bg-[color:var(--muted)] px-2 py-0.5 text-[10px] font-bold uppercase text-[color:var(--muted-foreground)]">
+              <ClipboardList className="h-3 w-3 shrink-0" />
+              <span className="truncate">
+                {booking.type === "team" ? "Team booking" : "Single booking"}
+              </span>
             </span>
-            <span className={cn("rounded-full px-2 py-0.5 text-[10px] font-bold", paymentClass(booking.payment_status))}>
+            <span className={cn("rounded-full px-2 py-0.5 text-[10px] font-bold", paymentStatusClass(booking.payment_status))}>
               {paymentStatusLabel(booking.payment_status)}
             </span>
           </div>
+
+          <p className="line-clamp-2 text-xs font-semibold leading-5 text-[color:var(--muted-foreground)]">
+            {bookingStatusDescription(booking.status)}
+          </p>
         </CardContent>
       </Card>
+  );
+
+  if (!interactive) {
+    return content;
+  }
+
+  return (
+    <Link href={`/bookings/${booking.id}`} className="block">
+      {content}
     </Link>
   );
 }

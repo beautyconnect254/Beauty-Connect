@@ -1,4 +1,9 @@
 import {
+  bookingIsActive,
+  defaultPaymentInstructions,
+} from "@/lib/booking-workflow";
+import {
+  adminActivityLogs,
   adminNotes,
   bookings,
   hires,
@@ -19,6 +24,7 @@ import type {
   BookingRecord,
   DashboardMetric,
   Hire,
+  RoleSpecialtyCatalog,
   SkillRecord,
   StaffingAssignment,
   StaffingAssignmentRecord,
@@ -344,6 +350,15 @@ function hydrateBooking(record: BookingRecord): Booking {
 
   return {
     ...record,
+    payment_instructions:
+      record.payment_instructions ??
+      (record.status === "confirmed"
+        ? defaultPaymentInstructions({
+            id: record.id,
+            type: record.type,
+            worker_count: hydratedWorkers.length || record.worker_ids.length,
+          })
+        : null),
     workers: hydratedWorkers,
     team_request: record.team_request_id ? getTeamRequestById(record.team_request_id) ?? null : null,
     worker_count: hydratedWorkers.length,
@@ -352,10 +367,7 @@ function hydrateBooking(record: BookingRecord): Booking {
 
 export function getBookings() {
   return bookings
-    .filter(
-      (booking) =>
-        booking.payment_status !== "deposit_paid" && booking.payment_status !== "paid",
-    )
+    .filter((booking) => bookingIsActive(booking.status))
     .map((booking) => hydrateBooking(booking))
     .sort(
       (left, right) =>
@@ -411,6 +423,13 @@ export function getSkills() {
   return skills;
 }
 
+export function getRoleSpecialtyCatalog(): RoleSpecialtyCatalog[] {
+  return workerCategories.map((category) => ({
+    ...category,
+    specialties: skills.filter((skill) => skill.role === category.role),
+  }));
+}
+
 export function getLocations() {
   return Array.from(new Set(workers.map((worker) => worker.location))).sort();
 }
@@ -425,10 +444,17 @@ export function getStaffingAssignments() {
     .filter((assignment): assignment is StaffingAssignment => Boolean(assignment));
 }
 
+export function getAdminActivityLogs() {
+  return [...adminActivityLogs].sort(
+    (left, right) =>
+      new Date(right.created_at).getTime() - new Date(left.created_at).getTime(),
+  );
+}
+
 export function getDashboardMetrics(): DashboardMetric[] {
   const hydratedWorkers = getWorkers();
-  const hydratedRequests = getTeamRequests();
   const hydratedAssignments = getStaffingAssignments();
+  const hydratedBookings = getBookings();
 
   return [
     {
@@ -451,18 +477,18 @@ export function getDashboardMetrics(): DashboardMetric[] {
       detail: "Verified workers currently free for matching and reservation.",
     },
     {
-      label: "Pending requests",
+      label: "Pending bookings",
       value: String(
-        hydratedRequests.filter((request) => request.status !== "completed").length,
+        hydratedBookings.filter((booking) => booking.status === "pending").length,
       ),
-      detail: "Owner requests still moving through review, matching, or staffing.",
+      detail: "Bookings waiting on matching and manual worker availability checks.",
     },
     {
-      label: "Completed placements",
+      label: "Reserved workers",
       value: String(
-        hydratedAssignments.filter((assignment) => assignment.status === "hired").length,
+        hydratedAssignments.filter((assignment) => assignment.status === "reserved").length,
       ),
-      detail: "Workers marked as placed into completed staffing outcomes.",
+      detail: "Workers secured for confirmed bookings and blocked from future matching.",
     },
   ];
 }

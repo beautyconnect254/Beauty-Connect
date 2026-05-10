@@ -2,67 +2,128 @@
 
 import Link from "next/link";
 import { usePathname } from "next/navigation";
-import { ClipboardList, LayoutDashboard, Users } from "lucide-react";
+import {
+  BadgeCheck,
+  BriefcaseBusiness,
+  CalendarCheck2,
+  Clock3,
+  LayoutDashboard,
+  ListPlus,
+  Scissors,
+  Sparkles,
+  UserRoundCheck,
+  Users,
+} from "lucide-react";
 
 import { cn } from "@/lib/utils";
 
-const adminLinks = [
-  { href: "/admin", label: "Dashboard", icon: LayoutDashboard },
-  { href: "/admin/workers", label: "Workers", icon: Users },
-  { href: "/admin/team-requests", label: "Team Requests", icon: ClipboardList },
-];
+const navGroups = [
+  {
+    label: "Core",
+    items: [{ href: "/admin", label: "Dashboard", icon: LayoutDashboard }],
+  },
+  {
+    label: "Workers",
+    items: [
+      { href: "/admin/workers/list", label: "List Worker", icon: ListPlus },
+      { href: "/admin/workers/active", label: "Active Workers", icon: Users },
+    ],
+  },
+  {
+    label: "Specialties",
+    items: [
+      { href: "/admin/specialties/roles", label: "Roles", icon: Scissors },
+      {
+        href: "/admin/specialties/sub-specialties",
+        label: "Sub-Specialties",
+        icon: BadgeCheck,
+      },
+    ],
+  },
+  {
+    label: "Bookings",
+    items: [
+      { href: "/admin/bookings/pending/team", label: "Pending Team", icon: Clock3 },
+      { href: "/admin/bookings/pending/single", label: "Pending Single", icon: Clock3 },
+      {
+        href: "/admin/bookings/confirmed/team",
+        label: "Confirmed Team",
+        icon: CalendarCheck2,
+      },
+      {
+        href: "/admin/bookings/confirmed/single",
+        label: "Confirmed Single",
+        icon: CalendarCheck2,
+      },
+      { href: "/admin/bookings/paid/team", label: "Paid Team", icon: BriefcaseBusiness },
+      {
+        href: "/admin/bookings/paid/single",
+        label: "Paid Single",
+        icon: BriefcaseBusiness,
+      },
+    ],
+  },
+  {
+    label: "Promotion",
+    items: [
+      { href: "/admin/featured-workers", label: "Featured Workers", icon: Sparkles },
+    ],
+  },
+] as const;
 
 export function AdminSidebar() {
   const pathname = usePathname();
 
   return (
-    <aside className="flex flex-col gap-4 rounded-lg border border-[color:var(--border)] bg-white p-4 shadow-sm">
-      <div className="space-y-1">
-        <p className="text-xs font-semibold uppercase tracking-[0.26em] text-[color:var(--muted-foreground)]">
-          Admin console
-        </p>
-        <h2 className="text-xl font-extrabold text-[color:var(--foreground)]">
-          Beauty Connect
-        </h2>
-        <p className="text-sm leading-6 text-[color:var(--muted-foreground)]">
-          Review talent, shape teams, and keep verification quality high.
-        </p>
+    <aside className="h-fit rounded-lg border border-[color:var(--border)] bg-white p-3 shadow-sm lg:sticky lg:top-4">
+      <div className="mb-3 flex items-center gap-3 border-b border-[color:var(--border)] pb-3">
+        <div className="flex h-9 w-9 items-center justify-center rounded-md bg-[color:var(--foreground)] text-white">
+          <UserRoundCheck className="h-4 w-4" />
+        </div>
+        <div className="min-w-0">
+          <p className="truncate text-sm font-extrabold text-[color:var(--foreground)]">
+            Beauty Connect
+          </p>
+          <p className="text-[11px] font-bold uppercase tracking-[0.14em] text-[color:var(--muted-foreground)]">
+            Staffing ops
+          </p>
+        </div>
       </div>
 
-      <nav className="flex gap-2 overflow-x-auto pb-1 lg:flex-col">
-        {adminLinks.map((item) => {
-          const active =
-            item.href === "/admin"
-              ? pathname === item.href
-              : pathname.startsWith(item.href);
-          const Icon = item.icon;
+      <nav className="grid gap-3 sm:grid-cols-2 lg:grid-cols-1">
+        {navGroups.map((group) => (
+          <div key={group.label} className="min-w-0">
+            <p className="mb-1 px-2 text-[10px] font-extrabold uppercase tracking-[0.16em] text-[color:var(--muted-foreground)]">
+              {group.label}
+            </p>
+            <div className="grid gap-1">
+              {group.items.map((item) => {
+                const active =
+                  item.href === "/admin"
+                    ? pathname === item.href
+                    : pathname.startsWith(item.href);
+                const Icon = item.icon;
 
-          return (
-            <Link
-              key={item.href}
-              href={item.href}
-              className={cn(
-                "flex min-w-fit items-center gap-3 rounded-md px-3 py-2 text-sm font-bold transition",
-                active
-                  ? "bg-[linear-gradient(135deg,var(--primary),var(--accent))] text-white"
-                  : "bg-[color:var(--muted)] text-[color:var(--foreground)] hover:bg-emerald-50",
-              )}
-            >
-              <Icon className="h-4 w-4" />
-              {item.label}
-            </Link>
-          );
-        })}
+                return (
+                  <Link
+                    key={item.href}
+                    href={item.href}
+                    className={cn(
+                      "flex min-w-0 items-center gap-2 rounded-md px-2.5 py-2 text-xs font-extrabold transition",
+                      active
+                        ? "bg-[color:var(--foreground)] text-white"
+                        : "text-[color:var(--foreground)] hover:bg-[color:var(--muted)]",
+                    )}
+                  >
+                    <Icon className="h-4 w-4 shrink-0" />
+                    <span className="truncate">{item.label}</span>
+                  </Link>
+                );
+              })}
+            </div>
+          </div>
+        ))}
       </nav>
-
-      <div className="rounded-md bg-emerald-50 p-3">
-        <p className="text-sm font-semibold text-[color:var(--foreground)]">
-          Today&apos;s focus
-        </p>
-        <p className="mt-2 text-sm leading-6 text-[color:var(--muted-foreground)]">
-          Check worker documents and reply to urgent team requests first.
-        </p>
-      </div>
     </aside>
   );
 }

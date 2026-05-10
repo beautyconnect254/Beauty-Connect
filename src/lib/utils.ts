@@ -30,8 +30,6 @@ export function availabilityLabel(status: AvailabilityStatus) {
       return "Reserved";
     case "hired":
       return "Hired";
-    case "unavailable":
-      return "Unavailable";
     default:
       return status;
   }

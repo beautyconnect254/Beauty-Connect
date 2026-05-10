@@ -8,6 +8,7 @@ import { SiteShell } from "@/components/layout/site-shell";
 import { Badge } from "@/components/ui/badge";
 import { buttonVariants } from "@/components/ui/button";
 import { Card, CardContent } from "@/components/ui/card";
+import { WorkerBookingModal } from "@/components/workers/worker-booking-modal";
 import { getPublicWorkerById, getPublicWorkers } from "@/lib/data-access";
 import { availabilityLabel, cn, verificationLabel } from "@/lib/utils";
 
@@ -129,19 +130,13 @@ export default async function WorkerProfilePage({
               </div>
 
               <div className="flex flex-wrap gap-2">
-                <Link
-                  href={`/bookings?worker=${worker.id}`}
-                  className={buttonVariants({ variant: "default", size: "sm" })}
-                >
-                  Book Worker
-                </Link>
-                <Link
-                  href={`/team-builder?worker=${worker.id}`}
-                  className={buttonVariants({ variant: "outline", size: "sm" })}
-                >
-                  Add To Team
-                </Link>
+                <WorkerBookingModal worker={worker} />
               </div>
+
+              <p className="rounded-md bg-[color:var(--muted)] px-3 py-2 text-xs font-semibold leading-5 text-[color:var(--muted-foreground)]">
+                Direct contact opens only after Beauty Connect confirms availability and
+                verifies payment.
+              </p>
             </CardContent>
           </div>
         </Card>
