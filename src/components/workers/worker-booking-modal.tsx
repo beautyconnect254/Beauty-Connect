@@ -1,17 +1,13 @@
 "use client";
 
-import Link from "next/link";
 import type { ReactNode } from "react";
 import { useState } from "react";
 import { AnimatePresence, motion } from "framer-motion";
-import { CheckCircle2, Send, X } from "lucide-react";
+import { Send, X } from "lucide-react";
 
+import { BookingTrackingSuccess } from "@/components/bookings/booking-tracking-success";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
-import {
-  makeLocalSingleBooking,
-  saveLocalBooking,
-} from "@/lib/local-bookings";
 import type { Worker } from "@/lib/types";
 
 interface WorkerBookingModalProps {
@@ -24,6 +20,11 @@ interface SingleBookingForm {
   contactNumber: string;
   location: string;
   preferredStartDate: string;
+}
+
+interface BookingSubmissionResult {
+  trackingUrl: string;
+  trackingToken: string;
 }
 
 const initialForm: SingleBookingForm = {
@@ -39,7 +40,8 @@ export function WorkerBookingModal({ worker }: WorkerBookingModalProps) {
   const [form, setForm] = useState(initialForm);
   const [errors, setErrors] = useState<Record<string, string>>({});
   const [isSubmitting, setIsSubmitting] = useState(false);
-  const [submitted, setSubmitted] = useState(false);
+  const [submission, setSubmission] = useState<BookingSubmissionResult | null>(null);
+  const [submitError, setSubmitError] = useState("");
 
   function validate() {
     const nextErrors: Record<string, string> = {};
@@ -55,26 +57,58 @@ export function WorkerBookingModal({ worker }: WorkerBookingModalProps) {
     return Object.keys(nextErrors).length === 0;
   }
 
-  function submit() {
+  async function submit() {
     if (!validate()) {
       return;
     }
 
     setIsSubmitting(true);
-    window.setTimeout(() => {
-      saveLocalBooking(
-        makeLocalSingleBooking({
-          worker,
+    setSubmitError("");
+
+    try {
+      const response = await fetch("/api/bookings", {
+        method: "POST",
+        headers: {
+          "Content-Type": "application/json",
+        },
+        body: JSON.stringify({
+          type: "worker",
+          workerId: worker.id,
+          workerName: worker.full_name,
+          workerRole: worker.primary_role,
           salonName: form.salonName,
           contactName: form.contactName,
           contactNumber: form.contactNumber,
           location: form.location,
           preferredStartDate: form.preferredStartDate,
         }),
+      });
+      const result = (await response.json()) as
+        | BookingSubmissionResult
+        | { error?: string };
+
+      if (!response.ok) {
+        throw new Error(
+          "error" in result
+            ? result.error ?? "Could not submit booking."
+            : "Could not submit booking.",
+        );
+      }
+
+      if (!("trackingUrl" in result)) {
+        throw new Error("Could not submit booking.");
+      }
+
+      setSubmission(result);
+    } catch (error) {
+      setSubmitError(
+        error instanceof Error
+          ? error.message
+          : "Could not submit booking. Please try again.",
       );
+    } finally {
       setIsSubmitting(false);
-      setSubmitted(true);
-    }, 550);
+    }
   }
 
   function resetAndClose() {
@@ -82,7 +116,8 @@ export function WorkerBookingModal({ worker }: WorkerBookingModalProps) {
     window.setTimeout(() => {
       setForm(initialForm);
       setErrors({});
-      setSubmitted(false);
+      setSubmission(null);
+      setSubmitError("");
       setIsSubmitting(false);
     }, 180);
   }
@@ -127,28 +162,13 @@ export function WorkerBookingModal({ worker }: WorkerBookingModalProps) {
                 </button>
               </div>
 
-              {submitted ? (
-                <div className="space-y-4 p-4">
-                  <div className="rounded-md border border-emerald-200 bg-emerald-50 p-3 text-emerald-900">
-                    <div className="flex gap-2">
-                      <CheckCircle2 className="mt-0.5 h-5 w-5" />
-                      <div>
-                        <p className="font-extrabold">Request created</p>
-                        <p className="mt-1 text-sm leading-5">
-                          This is now in Bookings under Single Bookings, Pending.
-                        </p>
-                      </div>
-                    </div>
-                  </div>
-                  <div className="grid grid-cols-2 gap-2">
-                    <Button variant="outline" onClick={resetAndClose}>
-                      Close
-                    </Button>
-                    <Link href="/bookings" className="block">
-                      <Button className="w-full">View bookings</Button>
-                    </Link>
-                  </div>
-                </div>
+              {submission ? (
+                <BookingTrackingSuccess
+                  trackingToken={submission.trackingToken}
+                  trackingUrl={submission.trackingUrl}
+                  onClose={resetAndClose}
+                  className="p-4"
+                />
               ) : (
                 <div className="space-y-3 p-4">
                   <ModalField error={errors.salonName} label="Salon Name">
@@ -220,6 +240,11 @@ export function WorkerBookingModal({ worker }: WorkerBookingModalProps) {
                       </>
                     )}
                   </Button>
+                  {submitError ? (
+                    <p className="rounded-md border border-rose-200 bg-rose-50 px-3 py-2 text-sm font-bold text-rose-700">
+                      {submitError}
+                    </p>
+                  ) : null}
                 </div>
               )}
             </motion.div>

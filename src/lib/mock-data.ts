@@ -646,6 +646,7 @@ export const staffingAssignments: StaffingAssignmentRecord[] = [
 export const bookings: BookingRecord[] = [
   {
     id: "booking-luna-team",
+    tracking_token: "demoLunaTeam01",
     type: "team",
     title: "Luna House opening team",
     status: "confirmed",
@@ -670,6 +671,7 @@ export const bookings: BookingRecord[] = [
   },
   {
     id: "booking-baroque-barbers",
+    tracking_token: "demoBaroqueTeam01",
     type: "team",
     title: "Baroque barber team",
     status: "pending",
@@ -684,6 +686,7 @@ export const bookings: BookingRecord[] = [
   },
   {
     id: "booking-leila-single",
+    tracking_token: "demoLeilaSingle01",
     type: "worker",
     title: "Leila Hassan single booking",
     status: "pending",
@@ -698,6 +701,7 @@ export const bookings: BookingRecord[] = [
   },
   {
     id: "booking-thando-single",
+    tracking_token: "demoThandoSingle01",
     type: "worker",
     title: "Thando Mbeki wig specialist",
     status: "confirmed",
@@ -722,6 +726,7 @@ export const bookings: BookingRecord[] = [
   },
   {
     id: "booking-atelier-makeup",
+    tracking_token: "demoAtelierSingle01",
     type: "worker",
     title: "Atelier makeup booking",
     status: "paid",
@@ -746,6 +751,7 @@ export const bookings: BookingRecord[] = [
   },
   {
     id: "booking-serene-spa",
+    tracking_token: "demoSereneSingle01",
     type: "worker",
     title: "Serene Rooms spa therapist",
     status: "paid",

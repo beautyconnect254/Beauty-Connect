@@ -194,6 +194,7 @@ export interface Database {
       bookings: {
         Row: {
           id: string;
+          tracking_token: string;
           type: string;
           title: string;
           status: string;
@@ -202,11 +203,13 @@ export interface Database {
           submitted_at: string;
           team_request_id: string | null;
           notes: string;
+          request_details: Json;
           payment_instructions: Json | null;
           updated_at: string;
         };
         Insert: Partial<Database["public"]["Tables"]["bookings"]["Row"]> & {
           id: string;
+          tracking_token: string;
           type: string;
           title: string;
           booking_date: string;
@@ -359,5 +362,9 @@ export interface Database {
         >;
       };
     };
+    Views: Record<string, never>;
+    Functions: Record<string, never>;
+    Enums: Record<string, string>;
+    CompositeTypes: Record<string, never>;
   };
 }

@@ -1,9 +1,8 @@
 "use client";
 
-import { useEffect, useMemo, useState } from "react";
+import { useMemo, useState } from "react";
 
 import { BookingCard } from "@/components/bookings/booking-card";
-import { readLocalBookings } from "@/lib/local-bookings";
 import type { Booking, BookingStatus, BookingType } from "@/lib/types";
 import { cn } from "@/lib/utils";
 
@@ -23,24 +22,12 @@ const bookingTypes: Array<{ value: BookingType; label: string }> = [
 ];
 
 export function BookingsClient({ bookings }: BookingsClientProps) {
-  const [localBookings, setLocalBookings] = useState<Booking[]>([]);
   const [activeType, setActiveType] = useState<BookingType>("team");
   const [activeTab, setActiveTab] = useState<BookingStatus>("pending");
-  const allBookings = useMemo(
-    () => [...localBookings, ...bookings],
-    [bookings, localBookings],
-  );
+  const allBookings = useMemo(() => bookings, [bookings]);
   const visibleBookings = allBookings.filter(
     (booking) => booking.type === activeType && booking.status === activeTab,
   );
-
-  useEffect(() => {
-    const handle = window.setTimeout(() => {
-      setLocalBookings(readLocalBookings());
-    }, 0);
-
-    return () => window.clearTimeout(handle);
-  }, []);
 
   return (
     <div className="space-y-3">
@@ -97,7 +84,7 @@ export function BookingsClient({ bookings }: BookingsClientProps) {
           {visibleBookings.map((booking) => (
             <BookingCard
               booking={booking}
-              interactive={!booking.id.startsWith("local-")}
+              interactive
               key={booking.id}
             />
           ))}

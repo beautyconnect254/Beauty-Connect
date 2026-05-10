@@ -1,3 +1,9 @@
+insert into public.admin_email_whitelist (email, active, added_by)
+values ('brioneroo@gmail.com', true, 'seed')
+on conflict (email) do update
+set active = true,
+    updated_at = now();
+
 insert into public.worker_roles (id, name, description, typical_team_use)
 values
   ('role-hair-stylist', 'Hair Stylist', 'Color, treatments, silk presses, and daily salon styling.', 'Main floor coverage for cuts, color, washing, and styling.'),
@@ -367,6 +373,7 @@ on conflict (id) do nothing;
 
 insert into public.bookings (
   id,
+  tracking_token,
   type,
   title,
   status,
@@ -380,6 +387,7 @@ insert into public.bookings (
 values
   (
     'booking-luna-team',
+    'demoLunaTeam01',
     'team',
     'Luna House opening team',
     'confirmed',
@@ -392,6 +400,7 @@ values
   ),
   (
     'booking-baroque-barbers',
+    'demoBaroqueTeam01',
     'team',
     'Baroque barber team',
     'pending',

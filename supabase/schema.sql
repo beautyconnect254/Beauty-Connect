@@ -1,97 +1,267 @@
-create type public.worker_role as enum (
-  'Hair Stylist',
-  'Barber',
-  'Nail Technician',
-  'Makeup Artist',
-  'Spa Therapist',
-  'Lash Technician',
-  'Braider',
-  'Wig Specialist'
-);
+create extension if not exists pgcrypto;
 
-create type public.availability_status as enum (
-  'available',
-  'reserved',
-  'hired'
-);
+do $$
+begin
+  if not exists (
+    select 1
+    from pg_type t
+    join pg_namespace n on n.oid = t.typnamespace
+    where n.nspname = 'public' and t.typname = 'worker_role'
+  ) then
+    create type public.worker_role as enum (
+      'Hair Stylist',
+      'Barber',
+      'Nail Technician',
+      'Makeup Artist',
+      'Spa Therapist',
+      'Lash Technician',
+      'Braider',
+      'Wig Specialist'
+    );
+  end if;
 
-create type public.verification_status as enum (
-  'pending',
-  'verified',
-  'rejected'
-);
+  if not exists (
+    select 1
+    from pg_type t
+    join pg_namespace n on n.oid = t.typnamespace
+    where n.nspname = 'public' and t.typname = 'availability_status'
+  ) then
+    create type public.availability_status as enum (
+      'available',
+      'reserved',
+      'hired'
+    );
+  end if;
 
-create type public.work_type as enum (
-  'full-time',
-  'part-time',
-  'contract',
-  'freelance'
-);
+  if not exists (
+    select 1
+    from pg_type t
+    join pg_namespace n on n.oid = t.typnamespace
+    where n.nspname = 'public' and t.typname = 'verification_status'
+  ) then
+    create type public.verification_status as enum (
+      'pending',
+      'verified',
+      'rejected'
+    );
+  end if;
 
-create type public.team_work_type as enum (
-  'long-term-contract',
-  'short-term-contract'
-);
+  if not exists (
+    select 1
+    from pg_type t
+    join pg_namespace n on n.oid = t.typnamespace
+    where n.nspname = 'public' and t.typname = 'work_type'
+  ) then
+    create type public.work_type as enum (
+      'full-time',
+      'part-time',
+      'contract',
+      'freelance'
+    );
+  end if;
 
-create type public.team_request_status as enum (
-  'new',
-  'reviewing',
-  'staffing',
-  'completed'
-);
+  if not exists (
+    select 1
+    from pg_type t
+    join pg_namespace n on n.oid = t.typnamespace
+    where n.nspname = 'public' and t.typname = 'team_work_type'
+  ) then
+    create type public.team_work_type as enum (
+      'long-term-contract',
+      'short-term-contract'
+    );
+  end if;
 
-create type public.team_request_urgency as enum (
-  'standard',
-  'priority',
-  'urgent'
-);
+  if not exists (
+    select 1
+    from pg_type t
+    join pg_namespace n on n.oid = t.typnamespace
+    where n.nspname = 'public' and t.typname = 'team_request_status'
+  ) then
+    create type public.team_request_status as enum (
+      'new',
+      'reviewing',
+      'staffing',
+      'completed'
+    );
+  end if;
 
-create type public.document_status as enum (
-  'pending',
-  'verified',
-  'rejected'
-);
+  if not exists (
+    select 1
+    from pg_type t
+    join pg_namespace n on n.oid = t.typnamespace
+    where n.nspname = 'public' and t.typname = 'team_request_urgency'
+  ) then
+    create type public.team_request_urgency as enum (
+      'standard',
+      'priority',
+      'urgent'
+    );
+  end if;
 
-create type public.staffing_assignment_status as enum (
-  'recommended',
-  'reserved',
-  'hired',
-  'released'
-);
+  if not exists (
+    select 1
+    from pg_type t
+    join pg_namespace n on n.oid = t.typnamespace
+    where n.nspname = 'public' and t.typname = 'document_status'
+  ) then
+    create type public.document_status as enum (
+      'pending',
+      'verified',
+      'rejected'
+    );
+  end if;
 
-create type public.booking_status as enum (
-  'pending',
-  'confirmed',
-  'paid',
-  'cancelled'
-);
+  if not exists (
+    select 1
+    from pg_type t
+    join pg_namespace n on n.oid = t.typnamespace
+    where n.nspname = 'public' and t.typname = 'staffing_assignment_status'
+  ) then
+    create type public.staffing_assignment_status as enum (
+      'recommended',
+      'reserved',
+      'hired',
+      'released'
+    );
+  end if;
 
-create type public.admin_activity_type as enum (
-  'booking_confirmed',
-  'worker_reserved',
-  'payment_confirmed',
-  'worker_released',
-  'worker_status_updated'
-);
+  if not exists (
+    select 1
+    from pg_type t
+    join pg_namespace n on n.oid = t.typnamespace
+    where n.nspname = 'public' and t.typname = 'booking_status'
+  ) then
+    create type public.booking_status as enum (
+      'pending',
+      'confirmed',
+      'paid',
+      'cancelled'
+    );
+  end if;
 
-create type public.payment_status as enum (
-  'not_due',
-  'deposit_due',
-  'deposit_paid',
-  'paid'
-);
+  if not exists (
+    select 1
+    from pg_type t
+    join pg_namespace n on n.oid = t.typnamespace
+    where n.nspname = 'public' and t.typname = 'admin_activity_type'
+  ) then
+    create type public.admin_activity_type as enum (
+      'booking_confirmed',
+      'worker_reserved',
+      'payment_confirmed',
+      'worker_released',
+      'worker_status_updated'
+    );
+  end if;
 
-create type public.payment_verification_status as enum (
-  'not_submitted',
-  'submitted',
-  'verified',
-  'rejected'
-);
+  if not exists (
+    select 1
+    from pg_type t
+    join pg_namespace n on n.oid = t.typnamespace
+    where n.nspname = 'public' and t.typname = 'payment_status'
+  ) then
+    create type public.payment_status as enum (
+      'not_due',
+      'deposit_due',
+      'deposit_paid',
+      'paid'
+    );
+  end if;
 
-create type public.hire_status as enum (
-  'active',
-  'completed'
-);
+  if not exists (
+    select 1
+    from pg_type t
+    join pg_namespace n on n.oid = t.typnamespace
+    where n.nspname = 'public' and t.typname = 'payment_verification_status'
+  ) then
+    create type public.payment_verification_status as enum (
+      'not_submitted',
+      'submitted',
+      'verified',
+      'rejected'
+    );
+  end if;
+
+  if not exists (
+    select 1
+    from pg_type t
+    join pg_namespace n on n.oid = t.typnamespace
+    where n.nspname = 'public' and t.typname = 'hire_status'
+  ) then
+    create type public.hire_status as enum (
+      'active',
+      'completed'
+    );
+  end if;
+end $$;
+
+alter type public.worker_role add value if not exists 'Hair Stylist';
+alter type public.worker_role add value if not exists 'Barber';
+alter type public.worker_role add value if not exists 'Nail Technician';
+alter type public.worker_role add value if not exists 'Makeup Artist';
+alter type public.worker_role add value if not exists 'Spa Therapist';
+alter type public.worker_role add value if not exists 'Lash Technician';
+alter type public.worker_role add value if not exists 'Braider';
+alter type public.worker_role add value if not exists 'Wig Specialist';
+
+alter type public.availability_status add value if not exists 'available';
+alter type public.availability_status add value if not exists 'reserved';
+alter type public.availability_status add value if not exists 'hired';
+
+alter type public.verification_status add value if not exists 'pending';
+alter type public.verification_status add value if not exists 'verified';
+alter type public.verification_status add value if not exists 'rejected';
+
+alter type public.work_type add value if not exists 'full-time';
+alter type public.work_type add value if not exists 'part-time';
+alter type public.work_type add value if not exists 'contract';
+alter type public.work_type add value if not exists 'freelance';
+
+alter type public.team_work_type add value if not exists 'long-term-contract';
+alter type public.team_work_type add value if not exists 'short-term-contract';
+
+alter type public.team_request_status add value if not exists 'new';
+alter type public.team_request_status add value if not exists 'reviewing';
+alter type public.team_request_status add value if not exists 'staffing';
+alter type public.team_request_status add value if not exists 'completed';
+
+alter type public.team_request_urgency add value if not exists 'standard';
+alter type public.team_request_urgency add value if not exists 'priority';
+alter type public.team_request_urgency add value if not exists 'urgent';
+
+alter type public.document_status add value if not exists 'pending';
+alter type public.document_status add value if not exists 'verified';
+alter type public.document_status add value if not exists 'rejected';
+
+alter type public.staffing_assignment_status add value if not exists 'recommended';
+alter type public.staffing_assignment_status add value if not exists 'reserved';
+alter type public.staffing_assignment_status add value if not exists 'hired';
+alter type public.staffing_assignment_status add value if not exists 'released';
+
+alter type public.booking_status add value if not exists 'pending';
+alter type public.booking_status add value if not exists 'confirmed';
+alter type public.booking_status add value if not exists 'paid';
+alter type public.booking_status add value if not exists 'cancelled';
+
+alter type public.admin_activity_type add value if not exists 'booking_confirmed';
+alter type public.admin_activity_type add value if not exists 'worker_reserved';
+alter type public.admin_activity_type add value if not exists 'payment_confirmed';
+alter type public.admin_activity_type add value if not exists 'worker_released';
+alter type public.admin_activity_type add value if not exists 'worker_status_updated';
+
+alter type public.payment_status add value if not exists 'not_due';
+alter type public.payment_status add value if not exists 'deposit_due';
+alter type public.payment_status add value if not exists 'deposit_paid';
+alter type public.payment_status add value if not exists 'paid';
+
+alter type public.payment_verification_status add value if not exists 'not_submitted';
+alter type public.payment_verification_status add value if not exists 'submitted';
+alter type public.payment_verification_status add value if not exists 'verified';
+alter type public.payment_verification_status add value if not exists 'rejected';
+
+alter type public.hire_status add value if not exists 'active';
+alter type public.hire_status add value if not exists 'completed';
 
 create or replace function public.set_updated_at()
 returns trigger
@@ -123,6 +293,9 @@ create table if not exists public.workers (
   created_at timestamptz not null default now(),
   updated_at timestamptz not null default now()
 );
+
+alter table public.workers
+add column if not exists id_number text not null default '';
 
 create table if not exists public.worker_references (
   id text primary key,
@@ -193,6 +366,32 @@ create table if not exists public.team_requests (
   updated_at timestamptz not null default now()
 );
 
+do $$
+begin
+  if exists (
+    select 1
+    from information_schema.columns
+    where table_schema = 'public'
+      and table_name = 'team_requests'
+      and column_name = 'work_type'
+      and udt_schema = 'public'
+      and udt_name = 'work_type'
+  ) then
+    alter table public.team_requests
+    alter column work_type drop default;
+
+    alter table public.team_requests
+    alter column work_type type public.team_work_type
+    using case
+      when work_type::text in ('long-term-contract', 'short-term-contract') then work_type::text::public.team_work_type
+      else 'long-term-contract'::public.team_work_type
+    end;
+
+    alter table public.team_requests
+    alter column work_type set default 'long-term-contract'::public.team_work_type;
+  end if;
+end $$;
+
 create table if not exists public.team_request_roles (
   id text primary key,
   team_request_id text not null references public.team_requests(id) on delete cascade,
@@ -211,17 +410,32 @@ create table if not exists public.team_request_role_specialties (
 
 create table if not exists public.bookings (
   id text primary key,
+  tracking_token text not null unique,
   type text not null check (type in ('worker', 'team')),
   title text not null,
-  status public.booking_status not null default 'pending',
+  status public.booking_status not null,
   payment_status public.payment_status not null default 'not_due',
   booking_date date not null,
   submitted_at timestamptz not null default now(),
   team_request_id text references public.team_requests(id) on delete set null,
   notes text not null default '',
+  request_details jsonb not null default '{}'::jsonb,
   payment_instructions jsonb,
   updated_at timestamptz not null default now()
 );
+
+alter table public.bookings
+add column if not exists tracking_token text;
+
+alter table public.bookings
+add column if not exists request_details jsonb not null default '{}'::jsonb;
+
+update public.bookings
+set tracking_token = replace(gen_random_uuid()::text, '-', '')
+where tracking_token is null or tracking_token = '';
+
+alter table public.bookings
+alter column tracking_token set not null;
 
 create table if not exists public.booking_workers (
   booking_id text not null references public.bookings(id) on delete cascade,
@@ -281,6 +495,16 @@ create table if not exists public.staffing_assignments (
   notes text not null default ''
 );
 
+create table if not exists public.admin_email_whitelist (
+  email text primary key,
+  active boolean not null default true,
+  added_by text not null default 'system',
+  created_at timestamptz not null default now(),
+  updated_at timestamptz not null default now(),
+  check (email = lower(trim(email))),
+  check (position('@' in email) > 1)
+);
+
 create table if not exists public.admin_notes (
   id text primary key,
   worker_id text references public.workers(id) on delete cascade,
@@ -321,6 +545,7 @@ create index if not exists team_requests_urgency_idx on public.team_requests (ur
 create index if not exists team_request_roles_request_idx on public.team_request_roles (team_request_id);
 create index if not exists team_request_role_specialties_role_idx on public.team_request_role_specialties (team_request_role_id);
 create index if not exists bookings_status_idx on public.bookings (status);
+create unique index if not exists bookings_tracking_token_idx on public.bookings (tracking_token);
 create index if not exists bookings_payment_status_idx on public.bookings (payment_status);
 create index if not exists bookings_team_request_idx on public.bookings (team_request_id);
 create index if not exists booking_workers_worker_idx on public.booking_workers (worker_id);
@@ -332,6 +557,7 @@ create index if not exists hire_workers_worker_idx on public.hire_workers (worke
 create index if not exists verification_documents_worker_idx on public.verification_documents (worker_id);
 create index if not exists staffing_assignments_request_idx on public.staffing_assignments (team_request_id);
 create index if not exists staffing_assignments_worker_idx on public.staffing_assignments (worker_id);
+create index if not exists admin_email_whitelist_active_idx on public.admin_email_whitelist (active);
 create index if not exists admin_notes_worker_idx on public.admin_notes (worker_id);
 create index if not exists admin_notes_team_request_idx on public.admin_notes (team_request_id);
 create index if not exists admin_notes_assignment_idx on public.admin_notes (staffing_assignment_id);
@@ -341,7 +567,10 @@ create index if not exists admin_activity_logs_created_idx on public.admin_activ
 
 create unique index if not exists staffing_assignments_active_worker_idx
 on public.staffing_assignments (worker_id)
-where status in ('reserved', 'hired');
+where status in (
+  'reserved'::public.staffing_assignment_status,
+  'hired'::public.staffing_assignment_status
+);
 
 drop trigger if exists workers_set_updated_at on public.workers;
 create trigger workers_set_updated_at
@@ -376,5 +605,11 @@ execute function public.set_updated_at();
 drop trigger if exists hires_set_updated_at on public.hires;
 create trigger hires_set_updated_at
 before update on public.hires
+for each row
+execute function public.set_updated_at();
+
+drop trigger if exists admin_email_whitelist_set_updated_at on public.admin_email_whitelist;
+create trigger admin_email_whitelist_set_updated_at
+before update on public.admin_email_whitelist
 for each row
 execute function public.set_updated_at();

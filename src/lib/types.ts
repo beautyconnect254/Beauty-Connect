@@ -173,6 +173,7 @@ export interface StaffingAssignmentRecord {
 
 export interface BookingRecord {
   id: string;
+  tracking_token: string | null;
   type: BookingType;
   title: string;
   status: BookingStatus;
@@ -182,6 +183,7 @@ export interface BookingRecord {
   worker_ids: string[];
   team_request_id: string | null;
   notes: string;
+  request_details?: BookingRequestDetails | null;
   payment_instructions: PaymentInstructions | null;
   payment_verification: AdminPaymentVerification | null;
 }
@@ -195,6 +197,30 @@ export interface HireRecord {
   hire_date: string;
   worker_ids: string[];
   payment_reference: string;
+}
+
+export interface BookingRequestDetails {
+  client?: {
+    salon_name?: string;
+    contact_name?: string;
+    contact_email?: string;
+    contact_whatsapp?: string;
+    location?: string;
+  };
+  requested_worker?: {
+    id?: string;
+    name?: string;
+    role?: string;
+  };
+  roles?: Array<{
+    role: string;
+    quantity: number;
+    min_experience?: number;
+    experience_label?: string;
+    specialty_ids?: string[];
+    specialty_names?: string[];
+  }>;
+  work_type?: TeamWorkType;
 }
 
 export interface PaymentInstructions {

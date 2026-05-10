@@ -1,13 +1,11 @@
 "use client";
 
-import Link from "next/link";
 import type { ReactNode } from "react";
 import { useMemo, useState } from "react";
 import { format } from "date-fns";
 import { AnimatePresence, motion } from "framer-motion";
 import {
   CalendarDays,
-  CheckCircle2,
   ChevronLeft,
   ChevronRight,
   Minus,
@@ -16,16 +14,12 @@ import {
   X,
 } from "lucide-react";
 
+import { BookingTrackingSuccess } from "@/components/bookings/booking-tracking-success";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Input } from "@/components/ui/input";
 import { Select } from "@/components/ui/select";
-import {
-  makeLocalTeamBooking,
-  saveLocalBooking,
-  teamWorkTypeLabel,
-} from "@/lib/local-bookings";
 import type { RoleSpecialtyCatalog, TeamWorkType } from "@/lib/types";
 import { cn, totalHeadcount } from "@/lib/utils";
 
@@ -50,6 +44,12 @@ interface DraftRole {
   min_experience_amount: number;
   min_experience_unit: "months" | "years";
   specialty_ids: string[];
+}
+
+interface BookingSubmissionResult {
+  trackingUrl: string;
+  trackingToken: string;
+  submittedAt: string;
 }
 
 const steps = [{ label: "Salon Details" }, { label: "Build The Team" }] as const;
@@ -80,6 +80,16 @@ function experienceMonths(role: DraftRole) {
   return role.min_experience_unit === "years"
     ? role.min_experience_amount * 12
     : role.min_experience_amount;
+}
+
+function minExperienceYears(role: DraftRole) {
+  return Math.ceil(experienceMonths(role) / 12);
+}
+
+function teamWorkTypeLabel(workType: TeamWorkType) {
+  return workType === "short-term-contract"
+    ? "Short-Term Contract"
+    : "Long-Term Contract";
 }
 
 function experienceLabel(role: DraftRole) {
@@ -148,7 +158,8 @@ export function TeamBuilderClient({ roleCatalog }: TeamBuilderClientProps) {
   );
   const [errors, setErrors] = useState<Record<string, string>>({});
   const [isSubmitting, setIsSubmitting] = useState(false);
-  const [submittedAt, setSubmittedAt] = useState<string | null>(null);
+  const [submission, setSubmission] = useState<BookingSubmissionResult | null>(null);
+  const [submitError, setSubmitError] = useState("");
 
   const selectedRoles = roles.filter((item) => item.quantity > 0);
   const headcount = totalHeadcount(selectedRoles);
@@ -181,7 +192,7 @@ export function TeamBuilderClient({ roleCatalog }: TeamBuilderClientProps) {
 
     if (!draft.salon_name.trim()) nextErrors.salon_name = "Salon name is required.";
     if (!draft.contact_name.trim()) nextErrors.contact_name = "Your name is required.";
-    if (!validateEmail(draft.contact_email)) {
+    if (draft.contact_email.trim() && !validateEmail(draft.contact_email)) {
       nextErrors.contact_email = "Use a valid email address.";
     }
     if (!draft.contact_whatsapp.trim()) {
@@ -204,7 +215,7 @@ export function TeamBuilderClient({ roleCatalog }: TeamBuilderClientProps) {
     setStepIndex((current) => Math.min(current + 1, steps.length - 1));
   }
 
-  function submitRequest() {
+  async function submitRequest() {
     const nextErrors: Record<string, string> = {};
 
     if (!validateStepOne()) {
@@ -222,23 +233,62 @@ export function TeamBuilderClient({ roleCatalog }: TeamBuilderClientProps) {
     }
 
     setIsSubmitting(true);
-    window.setTimeout(() => {
-      saveLocalBooking(
-        makeLocalTeamBooking({
+    setSubmitError("");
+
+    try {
+      const response = await fetch("/api/bookings", {
+        method: "POST",
+        headers: {
+          "Content-Type": "application/json",
+        },
+        body: JSON.stringify({
+          type: "team",
           salonName: draft.salon_name,
+          contactName: draft.contact_name,
+          contactEmail: draft.contact_email,
+          contactWhatsapp: draft.contact_whatsapp,
+          location: draft.location,
           workType: draft.work_type,
           targetStartDate: draft.target_start_date,
           roles: summaryRoles.map(({ role, specialtyNames }) => ({
             role: role.role,
             quantity: role.quantity,
+            minExperience: minExperienceYears(role),
             experienceLabel: experienceLabel(role),
+            specialtyIds: role.specialty_ids,
             specialtyNames,
           })),
         }),
+      });
+      const result = (await response.json()) as
+        | Omit<BookingSubmissionResult, "submittedAt">
+        | { error?: string };
+
+      if (!response.ok) {
+        throw new Error(
+          "error" in result
+            ? result.error ?? "Could not submit booking."
+            : "Could not submit booking.",
+        );
+      }
+
+      if (!("trackingUrl" in result)) {
+        throw new Error("Could not submit booking.");
+      }
+
+      setSubmission({
+        ...result,
+        submittedAt: new Date().toISOString(),
+      });
+    } catch (error) {
+      setSubmitError(
+        error instanceof Error
+          ? error.message
+          : "Could not submit booking. Please try again.",
       );
-      setSubmittedAt(new Date().toISOString());
+    } finally {
       setIsSubmitting(false);
-    }, 650);
+    }
   }
 
   return (
@@ -305,7 +355,7 @@ export function TeamBuilderClient({ roleCatalog }: TeamBuilderClientProps) {
             </FieldError>
             <FieldError error={errors.contact_email}>
               <label className="text-xs font-bold text-[color:var(--foreground)]">
-                Contact Email
+                Contact Email (optional)
               </label>
               <Input
                 type="email"
@@ -584,10 +634,15 @@ export function TeamBuilderClient({ roleCatalog }: TeamBuilderClientProps) {
             </div>
           </CardContent>
         </Card>
+        {submitError ? (
+          <p className="mt-2 rounded-md border border-rose-200 bg-rose-50 px-3 py-2 text-sm font-bold text-rose-700">
+            {submitError}
+          </p>
+        ) : null}
       </div>
 
       <AnimatePresence>
-        {submittedAt ? (
+        {submission ? (
           <motion.div
             className="fixed inset-0 z-50 flex items-end bg-black/35 px-3 py-4 sm:items-center sm:justify-center"
             initial={{ opacity: 0 }}
@@ -603,19 +658,16 @@ export function TeamBuilderClient({ roleCatalog }: TeamBuilderClientProps) {
             >
               <div className="flex items-start justify-between gap-3 border-b border-[color:var(--border)] p-4">
                 <div>
-                  <div className="flex items-center gap-2">
-                    <CheckCircle2 className="h-5 w-5 text-emerald-700" />
-                    <h2 className="text-lg font-extrabold text-[color:var(--foreground)]">
-                      Request sent
-                    </h2>
-                  </div>
+                  <h2 className="text-lg font-extrabold text-[color:var(--foreground)]">
+                    Request sent
+                  </h2>
                   <p className="mt-1 text-sm text-[color:var(--muted-foreground)]">
-                    This is now in Bookings under Team Bookings, Pending.
+                    Keep your tracking link before leaving this page.
                   </p>
                 </div>
                 <button
                   type="button"
-                  onClick={() => setSubmittedAt(null)}
+                  onClick={() => setSubmission(null)}
                   className="rounded-md p-2 hover:bg-[color:var(--muted)]"
                   aria-label="Close summary"
                 >
@@ -623,10 +675,23 @@ export function TeamBuilderClient({ roleCatalog }: TeamBuilderClientProps) {
                 </button>
               </div>
               <div className="space-y-3 p-4">
-                <SummaryRow label="Salon" value={draft.salon_name} />
-                <SummaryRow label="Work type" value={teamWorkTypeLabel(draft.work_type)} />
-                <SummaryRow label="Start date" value={formatStartDate(draft.target_start_date)} />
+                <BookingTrackingSuccess
+                  trackingToken={submission.trackingToken}
+                  trackingUrl={submission.trackingUrl}
+                  onClose={() => setSubmission(null)}
+                />
                 <div className="rounded-md border border-[color:var(--border)] p-3">
+                  <div className="mb-3 grid gap-2 sm:grid-cols-3">
+                    <SummaryRow label="Salon" value={draft.salon_name} />
+                    <SummaryRow
+                      label="Work type"
+                      value={teamWorkTypeLabel(draft.work_type)}
+                    />
+                    <SummaryRow
+                      label="Start date"
+                      value={formatStartDate(draft.target_start_date)}
+                    />
+                  </div>
                   <p className="text-xs font-bold uppercase text-[color:var(--muted-foreground)]">
                     Requested roles
                   </p>
@@ -647,11 +712,8 @@ export function TeamBuilderClient({ roleCatalog }: TeamBuilderClientProps) {
                 </div>
                 <p className="flex items-center gap-2 text-xs font-bold uppercase text-[color:var(--muted-foreground)]">
                   <CalendarDays className="h-3.5 w-3.5" />
-                  Submitted {format(new Date(submittedAt), "MMM d, yyyy")}
+                  Submitted {format(new Date(submission.submittedAt), "MMM d, yyyy")}
                 </p>
-                <Link href="/bookings" className="block">
-                  <Button className="w-full">View bookings</Button>
-                </Link>
               </div>
             </motion.div>
           </motion.div>
