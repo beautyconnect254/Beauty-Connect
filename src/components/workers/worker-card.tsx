@@ -2,23 +2,21 @@
 
 import Image from "next/image";
 import Link from "next/link";
+import { BriefcaseBusiness, CheckCircle2, MapPin } from "lucide-react";
 import { motion } from "framer-motion";
-import { ArrowUpRight, BriefcaseBusiness, MapPin, Sparkles } from "lucide-react";
 
 import { Badge } from "@/components/ui/badge";
 import { Card } from "@/components/ui/card";
-import { buttonVariants } from "@/components/ui/button";
-import type { Worker } from "@/lib/types";
-import {
-  availabilityLabel,
-  cn,
-  formatCurrency,
-  verificationLabel,
-} from "@/lib/utils";
+import type { Worker, WorkerRole } from "@/lib/types";
+import { availabilityLabel, cn, verificationLabel } from "@/lib/utils";
 
 interface WorkerCardProps {
   worker: Worker;
   compact?: boolean;
+}
+
+function roleLabel(role: WorkerRole) {
+  return role === "Hair Stylist" ? "Hairstylist" : role;
 }
 
 function verificationVariant(status: Worker["verification_status"]) {
@@ -32,112 +30,96 @@ function verificationVariant(status: Worker["verification_status"]) {
   }
 }
 
-function availabilityVariant(status: Worker["availability_status"]) {
+function availabilityClass(status: Worker["availability_status"]) {
   switch (status) {
     case "available":
-      return "verified";
+      return "bg-emerald-100 text-emerald-800";
     case "reserved":
-      return "pending";
+      return "bg-amber-100 text-amber-800";
     case "hired":
-    case "unavailable":
-      return "critical";
+      return "bg-purple-100 text-purple-800";
     default:
-      return "outline";
+      return "bg-rose-100 text-rose-800";
   }
 }
 
 export function WorkerCard({ worker, compact = false }: WorkerCardProps) {
   return (
-    <motion.div whileHover={{ y: -6 }} transition={{ duration: 0.22 }}>
-      <Card className="h-full overflow-hidden">
-        <div className="relative aspect-[4/4.4] overflow-hidden">
-          <Image
-            src={worker.profile_photo}
-            alt={worker.full_name}
-            fill
-            className="object-cover"
-            sizes="(max-width: 768px) 100vw, 33vw"
-          />
-          <div className="absolute inset-x-0 top-0 flex items-center justify-between gap-2 p-4">
-            <Badge variant={verificationVariant(worker.verification_status)}>
+    <motion.div
+      className="h-full min-w-0"
+      whileHover={{ y: compact ? -2 : -3 }}
+      transition={{ duration: 0.16 }}
+    >
+      <Card className="h-full min-w-0 overflow-hidden">
+        <Link
+          href={`/workers/${worker.id}`}
+          className="flex h-full min-w-0 flex-col text-[color:var(--foreground)]"
+        >
+          <div className="relative aspect-square overflow-hidden bg-[color:var(--muted)]">
+            <Image
+              src={worker.profile_photo}
+              alt={worker.full_name}
+              fill
+              className="object-cover"
+              sizes={compact ? "(max-width: 640px) 50vw, 180px" : "(max-width: 768px) 50vw, 33vw"}
+            />
+            <Badge
+              variant={verificationVariant(worker.verification_status)}
+              className="absolute left-1.5 top-1.5 gap-1 normal-case"
+            >
+              <CheckCircle2 className="h-3 w-3" />
               {verificationLabel(worker.verification_status)}
             </Badge>
-            <Badge variant={availabilityVariant(worker.availability_status)}>
-              {availabilityLabel(worker.availability_status)}
-            </Badge>
-          </div>
-        </div>
-
-        <div className="space-y-4 p-5">
-          <div className="space-y-2">
-            <div className="flex items-start justify-between gap-4">
-              <div>
-                <p className="font-[family-name:var(--font-display)] text-3xl leading-none text-[color:var(--foreground)]">
-                  {worker.full_name}
-                </p>
-                <p className="mt-2 text-sm font-semibold uppercase tracking-[0.2em] text-[color:var(--muted-foreground)]">
-                  {worker.primary_role}
-                </p>
-              </div>
-              {worker.featured ? (
-                <div className="rounded-full bg-[color:var(--secondary)] p-2 text-[color:var(--primary)]">
-                  <Sparkles className="h-4 w-4" />
-                </div>
-              ) : null}
-            </div>
-
-            <p className="text-sm leading-6 text-[color:var(--muted-foreground)]">
-              {worker.headline}
-            </p>
           </div>
 
-          <div className="grid gap-3 text-sm text-[color:var(--muted-foreground)] sm:grid-cols-2">
-            <div className="flex items-center gap-2">
-              <MapPin className="h-4 w-4 text-[color:var(--primary)]" />
-              <span>{worker.location}</span>
-            </div>
-            <div className="flex items-center gap-2">
-              <BriefcaseBusiness className="h-4 w-4 text-[color:var(--primary)]" />
-              <span>{worker.years_of_experience} years</span>
-            </div>
-          </div>
-
-          <div className="flex flex-wrap gap-2">
-            {worker.skills.slice(0, compact ? 2 : 3).map((skill) => (
-              <Badge key={skill.id} variant="outline" className="normal-case tracking-normal">
-                {skill.name}
-              </Badge>
-            ))}
-          </div>
-
-          {!compact ? (
-            <p className="text-sm leading-6 text-[color:var(--muted-foreground)]">
-              {worker.bio}
-            </p>
-          ) : null}
-
-          <div className="flex items-center justify-between gap-4">
-            <div>
-              <p className="text-xs uppercase tracking-[0.22em] text-[color:var(--muted-foreground)]">
-                Expected monthly
+          <div className={cn("min-w-0 flex-1", compact ? "space-y-1.5 p-2" : "space-y-3 p-3")}>
+            <div className="min-w-0">
+              <p
+                className={cn(
+                  "truncate font-extrabold leading-tight",
+                  compact ? "text-sm" : "text-base",
+                )}
+              >
+                {worker.full_name}
               </p>
-              <p className="text-lg font-semibold text-[color:var(--foreground)]">
-                {formatCurrency(worker.salary_expectation)}
+              <p className="mt-0.5 truncate text-[11px] font-bold text-[color:var(--primary)]">
+                {roleLabel(worker.primary_role)}
               </p>
             </div>
 
-            <Link
-              href={`/workers/${worker.id}`}
-              className={cn(
-                buttonVariants({ variant: "outline", size: "sm" }),
-                "gap-2",
-              )}
-            >
-              View profile
-              <ArrowUpRight className="h-4 w-4" />
-            </Link>
+            <div className="grid min-w-0 gap-1 text-[11px] font-medium text-[color:var(--muted-foreground)]">
+              <span className="flex min-w-0 items-center gap-1.5">
+                <BriefcaseBusiness className="h-3.5 w-3.5 shrink-0 text-emerald-700" />
+                <span className="truncate">{worker.years_of_experience} years experience</span>
+              </span>
+              <span className="flex min-w-0 items-center gap-1.5">
+                <MapPin className="h-3.5 w-3.5 shrink-0 text-emerald-700" />
+                <span className="truncate">{worker.location}</span>
+              </span>
+            </div>
+
+            <div className="flex min-w-0 flex-wrap gap-1.5">
+              <span
+                className={cn(
+                  "inline-flex max-w-full items-center rounded-full px-2 py-0.5 text-[10px] font-extrabold",
+                  availabilityClass(worker.availability_status),
+                )}
+              >
+                <span className="truncate">
+                  {availabilityLabel(worker.availability_status)}
+                </span>
+              </span>
+              {!compact && worker.skills.slice(0, 2).map((skill) => (
+                <span
+                  key={skill.id}
+                  className="inline-flex max-w-full items-center rounded-full bg-[color:var(--muted)] px-2 py-0.5 text-[10px] font-bold text-[color:var(--muted-foreground)]"
+                >
+                  <span className="truncate">{skill.name}</span>
+                </span>
+              ))}
+            </div>
           </div>
-        </div>
+        </Link>
       </Card>
     </motion.div>
   );

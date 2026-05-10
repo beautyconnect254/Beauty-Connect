@@ -34,6 +34,16 @@ export type StaffingAssignmentStatus =
   | "hired"
   | "released";
 
+export type FeaturedStatus = "active" | "scheduled" | "expired" | "off";
+
+export type BookingStatus = "pending" | "confirmed";
+
+export type BookingType = "worker" | "team";
+
+export type PaymentStatus = "not_due" | "deposit_due" | "deposit_paid" | "paid";
+
+export type HireStatus = "active" | "completed";
+
 export interface WorkerRecord {
   id: string;
   full_name: string;
@@ -49,6 +59,10 @@ export interface WorkerRecord {
   whatsapp_number: string;
   headline: string;
   featured: boolean;
+  featured_status: FeaturedStatus;
+  featured_expires_at: string | null;
+  featured_frequency: number;
+  featured_priority_score: number;
   listed_publicly: boolean;
 }
 
@@ -142,6 +156,30 @@ export interface StaffingAssignmentRecord {
   notes: string;
 }
 
+export interface BookingRecord {
+  id: string;
+  type: BookingType;
+  title: string;
+  status: BookingStatus;
+  payment_status: PaymentStatus;
+  booking_date: string;
+  submitted_at: string;
+  worker_ids: string[];
+  team_request_id: string | null;
+  notes: string;
+}
+
+export interface HireRecord {
+  id: string;
+  booking_id: string;
+  title: string;
+  status: HireStatus;
+  payment_status: PaymentStatus;
+  hire_date: string;
+  worker_ids: string[];
+  payment_reference: string;
+}
+
 export interface WorkerPlacementSummary {
   team_request_id: string;
   salon_name: string;
@@ -186,6 +224,18 @@ export interface TeamRequest extends TeamRequestRecord {
   role_recommendations: TeamRequestRoleRecommendation[];
   filled_headcount: number;
   open_headcount: number;
+}
+
+export interface Booking extends BookingRecord {
+  workers: Worker[];
+  team_request: TeamRequest | null;
+  worker_count: number;
+}
+
+export interface Hire extends HireRecord {
+  booking: Booking | null;
+  workers: Worker[];
+  worker_count: number;
 }
 
 export interface WorkerCategory {

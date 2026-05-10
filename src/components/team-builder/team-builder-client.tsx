@@ -1,5 +1,6 @@
 "use client";
 
+import Link from "next/link";
 import { useMemo, useState, useTransition } from "react";
 import { format } from "date-fns";
 import {
@@ -184,7 +185,7 @@ export function TeamBuilderClient({
         <Card>
           <CardHeader className="space-y-4">
             <div className="flex flex-wrap items-center justify-between gap-4">
-              <CardTitle>Staffing workflow</CardTitle>
+              <CardTitle>Booking Flow</CardTitle>
               <Badge variant="outline">{steps[stepIndex]?.label}</Badge>
             </div>
             <div className="grid gap-3 md:grid-cols-3">
@@ -379,7 +380,7 @@ export function TeamBuilderClient({
                       notes: event.target.value,
                     }))
                   }
-                  placeholder="Describe opening timelines, client mix, service standards, or anything the staffing team should know."
+                  placeholder="Describe start date, worker roles, branch needs, or anything Beauty Connect should check."
                 />
               </div>
             </CardContent>
@@ -389,7 +390,7 @@ export function TeamBuilderClient({
         {stepIndex === 1 ? (
           <Card>
             <CardHeader>
-              <CardTitle>Build the workforce</CardTitle>
+              <CardTitle>Build Team</CardTitle>
             </CardHeader>
             <CardContent className="space-y-4">
               {categories.map((category) => {
@@ -516,7 +517,7 @@ export function TeamBuilderClient({
         {stepIndex === 2 ? (
           <Card>
             <CardHeader>
-              <CardTitle>Review workforce match</CardTitle>
+              <CardTitle>Review Team Match</CardTitle>
             </CardHeader>
             <CardContent className="space-y-6">
               <div className="grid gap-4 md:grid-cols-3">
@@ -615,7 +616,7 @@ export function TeamBuilderClient({
                   ))
                 ) : (
                   <div className="rounded-[24px] border border-dashed border-[color:var(--border)] p-4 text-sm leading-6 text-[color:var(--muted-foreground)]">
-                    Add at least one role in step two to generate workforce recommendations.
+                    Add at least one role in step two to see matching workers.
                   </div>
                 )}
               </div>
@@ -690,7 +691,7 @@ export function TeamBuilderClient({
                 }
               >
                 <Sparkles className="h-4 w-4" />
-                {isPending ? "Preparing request..." : "Submit staffing request"}
+                {isPending ? "Preparing booking..." : "Submit Booking"}
               </Button>
             </div>
 
@@ -699,13 +700,19 @@ export function TeamBuilderClient({
                 <div className="flex items-start gap-3">
                   <CheckCircle2 className="mt-0.5 h-5 w-5" />
                   <div>
-                    <p className="font-semibold">Request sent to Beauty Connect ops</p>
+                    <p className="font-semibold">Booking sent to Beauty Connect</p>
                     <p className="mt-1 text-sm leading-6">
                       {draft.salon_name || "Unnamed salon"} has requested {requestSummary.toLowerCase()}.
                     </p>
                     <p className="mt-2 text-xs uppercase tracking-[0.2em]">
                       Submitted {format(new Date(submittedAt), "MMM d, yyyy")}
                     </p>
+                    <Link
+                      href="/bookings"
+                      className="mt-3 inline-flex rounded-md bg-emerald-600 px-3 py-1.5 text-xs font-bold text-white"
+                    >
+                      View Bookings
+                    </Link>
                   </div>
                 </div>
               </div>

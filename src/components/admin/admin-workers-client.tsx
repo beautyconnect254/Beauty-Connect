@@ -57,6 +57,10 @@ interface WorkerDraft {
   work_type: Worker["work_type"];
   whatsapp_number: string;
   headline: string;
+  featured_status: Worker["featured_status"];
+  featured_expires_at: string;
+  featured_frequency: string;
+  featured_priority_score: string;
   listed_publicly: boolean;
   selected_skill_ids: string[];
   portfolio_urls: string[];
@@ -93,6 +97,10 @@ function createDraft(worker?: Worker): WorkerDraft {
     work_type: worker?.work_type ?? "full-time",
     whatsapp_number: worker?.whatsapp_number ?? "",
     headline: worker?.headline ?? "",
+    featured_status: worker?.featured_status ?? "off",
+    featured_expires_at: worker?.featured_expires_at ?? "",
+    featured_frequency: String(worker?.featured_frequency ?? 0),
+    featured_priority_score: String(worker?.featured_priority_score ?? 0),
     listed_publicly: worker?.listed_publicly ?? false,
     selected_skill_ids: worker?.skills.map((skill) => skill.id) ?? [],
     portfolio_urls: worker?.portfolio.map((item) => item.image_url) ?? [],
@@ -262,7 +270,11 @@ export function AdminWorkersClient({
       work_type: draft.work_type,
       whatsapp_number: draft.whatsapp_number,
       headline: draft.headline,
-      featured: existingWorker?.featured ?? false,
+      featured: draft.featured_status === "active",
+      featured_status: draft.featured_status,
+      featured_expires_at: draft.featured_expires_at || null,
+      featured_frequency: Number(draft.featured_frequency),
+      featured_priority_score: Number(draft.featured_priority_score),
       listed_publicly: canListPublicly,
       skills: selectedSkills,
       portfolio: portfolioUrls.map((imageUrl, index) => ({
@@ -604,7 +616,7 @@ export function AdminWorkersClient({
                 </p>
                 <p className="mt-2 text-sm leading-6 text-[color:var(--muted-foreground)]">
                   These skills power staffing recommendations, workforce matching,
-                  and role-specific shortlist decisions.
+                  and role-specific booking decisions.
                 </p>
               </div>
               <div className="flex flex-wrap gap-3">

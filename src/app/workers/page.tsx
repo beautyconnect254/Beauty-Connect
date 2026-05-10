@@ -6,17 +6,23 @@ import { buttonVariants } from "@/components/ui/button";
 import { WorkersExplorer } from "@/components/workers/workers-explorer";
 import { getLocations, getPublicWorkers, getSkills } from "@/lib/data-access";
 
-export default function WorkersPage() {
+interface WorkersPageProps {
+  searchParams: Promise<{ role?: string }>;
+}
+
+export default async function WorkersPage({ searchParams }: WorkersPageProps) {
+  const { role } = await searchParams;
+
   return (
     <SiteShell>
-      <div className="mx-auto w-full max-w-7xl space-y-10 px-4 py-10 sm:px-6 lg:px-8 lg:py-14">
+      <div className="mx-auto w-full max-w-7xl space-y-5 px-3 py-5 sm:px-6 lg:px-8 lg:py-8">
         <PageIntro
-          eyebrow="Verified directory"
-          title="Browse beauty professionals already reviewed for shortlist-ready hiring."
-          description="Filter by skill, location, experience, availability, and verification to find workers that fit your service floor and launch timeline."
+          eyebrow="Workers"
+          title="Browse Verified Workers"
+          description="Filter by role, skill, location, experience, and availability."
           actions={
             <Link href="/team-builder" className={buttonVariants({ variant: "default" })}>
-              Build a team request
+              Build Team
             </Link>
           }
         />
@@ -25,6 +31,7 @@ export default function WorkersPage() {
           workers={getPublicWorkers()}
           skills={getSkills()}
           locations={getLocations()}
+          initialRole={role}
         />
       </div>
     </SiteShell>

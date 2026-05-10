@@ -16,12 +16,12 @@ export function AdminSidebar() {
   const pathname = usePathname();
 
   return (
-    <aside className="flex flex-col gap-5 rounded-[32px] border border-white/70 bg-white/75 p-5 shadow-[0_24px_60px_-32px_rgba(54,33,18,0.28)] backdrop-blur-xl">
+    <aside className="flex flex-col gap-4 rounded-lg border border-[color:var(--border)] bg-white p-4 shadow-sm">
       <div className="space-y-1">
         <p className="text-xs font-semibold uppercase tracking-[0.26em] text-[color:var(--muted-foreground)]">
           Admin console
         </p>
-        <h2 className="font-[family-name:var(--font-display)] text-3xl text-[color:var(--foreground)]">
+        <h2 className="text-xl font-extrabold text-[color:var(--foreground)]">
           Beauty Connect
         </h2>
         <p className="text-sm leading-6 text-[color:var(--muted-foreground)]">
@@ -42,10 +42,10 @@ export function AdminSidebar() {
               key={item.href}
               href={item.href}
               className={cn(
-                "flex min-w-fit items-center gap-3 rounded-2xl px-4 py-3 text-sm font-medium transition",
+                "flex min-w-fit items-center gap-3 rounded-md px-3 py-2 text-sm font-bold transition",
                 active
-                  ? "bg-[color:var(--primary)] text-[color:var(--primary-foreground)]"
-                  : "bg-[color:var(--secondary)] text-[color:var(--foreground)] hover:bg-[#eadfcb]",
+                  ? "bg-[linear-gradient(135deg,var(--primary),var(--accent))] text-white"
+                  : "bg-[color:var(--muted)] text-[color:var(--foreground)] hover:bg-emerald-50",
               )}
             >
               <Icon className="h-4 w-4" />
@@ -55,13 +55,12 @@ export function AdminSidebar() {
         })}
       </nav>
 
-      <div className="rounded-[24px] bg-[color:var(--secondary)] p-4">
+      <div className="rounded-md bg-emerald-50 p-3">
         <p className="text-sm font-semibold text-[color:var(--foreground)]">
           Today&apos;s focus
         </p>
         <p className="mt-2 text-sm leading-6 text-[color:var(--muted-foreground)]">
-          Keep verification SLAs tight and send lean shortlists for team requests
-          with urgent start dates.
+          Check worker documents and reply to urgent team requests first.
         </p>
       </div>
     </aside>

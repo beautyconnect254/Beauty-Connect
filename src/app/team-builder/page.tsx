@@ -11,11 +11,11 @@ import {
 export default function TeamBuilderPage() {
   return (
     <SiteShell>
-      <div className="mx-auto w-full max-w-7xl space-y-10 px-4 py-10 sm:px-6 lg:px-8 lg:py-14">
+      <div className="mx-auto w-full max-w-7xl space-y-5 px-3 py-5 sm:px-6 lg:px-8 lg:py-8">
         <PageIntro
-          eyebrow="Team builder"
-          title="Build a salon workforce request with role-by-role staffing clarity."
-          description="Define the team you need, set minimum experience and specialties, then hand the request to Beauty Connect for curated internal matching and worker reservation."
+          eyebrow="Bookings"
+          title="Build Your Salon Team"
+          description="Choose roles, experience, location, and worker skills."
         />
 
         <TeamBuilderClient

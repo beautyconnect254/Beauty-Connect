@@ -314,7 +314,7 @@ export function AdminTeamRequestsClient({
               assigned_at: new Date().toISOString(),
               notes:
                 nextStatus === "recommended"
-                  ? "Added to shortlist."
+                  ? "Added to booking list."
                   : nextStatus === "reserved"
                     ? "Reserved for client confirmation."
                     : "Marked as hired.",

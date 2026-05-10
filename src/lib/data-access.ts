@@ -1,5 +1,7 @@
 import {
   adminNotes,
+  bookings,
+  hires,
   portfolioImages,
   skills,
   staffingAssignments,
@@ -13,7 +15,10 @@ import {
   workerSkills,
 } from "@/lib/mock-data";
 import type {
+  Booking,
+  BookingRecord,
   DashboardMetric,
+  Hire,
   SkillRecord,
   StaffingAssignment,
   StaffingAssignmentRecord,
@@ -241,7 +246,28 @@ export function getPublicWorkers() {
 }
 
 export function getFeaturedWorkers() {
-  return getPublicWorkers().filter((worker) => worker.featured).slice(0, 4);
+  const now = Date.now();
+
+  return getPublicWorkers()
+    .filter((worker) => {
+      if (!worker.featured || worker.featured_status !== "active") {
+        return false;
+      }
+
+      if (!worker.featured_expires_at) {
+        return true;
+      }
+
+      return new Date(worker.featured_expires_at).getTime() >= now;
+    })
+    .sort((left, right) => {
+      if (left.featured_priority_score === right.featured_priority_score) {
+        return right.featured_frequency - left.featured_frequency;
+      }
+
+      return right.featured_priority_score - left.featured_priority_score;
+    })
+    .slice(0, 6);
 }
 
 export function getWorkerById(id: string) {
@@ -309,6 +335,61 @@ export function getTeamRequests(): TeamRequest[] {
 
 export function getTeamRequestById(id: string) {
   return getTeamRequests().find((request) => request.id === id);
+}
+
+function hydrateBooking(record: BookingRecord): Booking {
+  const hydratedWorkers = record.worker_ids
+    .map((workerId) => hydrateWorker(workerId))
+    .filter((worker): worker is Worker => Boolean(worker));
+
+  return {
+    ...record,
+    workers: hydratedWorkers,
+    team_request: record.team_request_id ? getTeamRequestById(record.team_request_id) ?? null : null,
+    worker_count: hydratedWorkers.length,
+  };
+}
+
+export function getBookings() {
+  return bookings
+    .filter(
+      (booking) =>
+        booking.payment_status !== "deposit_paid" && booking.payment_status !== "paid",
+    )
+    .map((booking) => hydrateBooking(booking))
+    .sort(
+      (left, right) =>
+        new Date(right.submitted_at).getTime() - new Date(left.submitted_at).getTime(),
+    );
+}
+
+export function getBookingById(id: string) {
+  return getBookings().find((booking) => booking.id === id);
+}
+
+export function getHires(): Hire[] {
+  return hires
+    .map((hire) => {
+      const hydratedWorkers = hire.worker_ids
+        .map((workerId) => hydrateWorker(workerId))
+        .filter((worker): worker is Worker => Boolean(worker));
+      const sourceBooking = bookings.find((booking) => booking.id === hire.booking_id);
+
+      return {
+        ...hire,
+        booking: sourceBooking ? hydrateBooking(sourceBooking) : null,
+        workers: hydratedWorkers,
+        worker_count: hydratedWorkers.length,
+      };
+    })
+    .sort(
+      (left, right) =>
+        new Date(right.hire_date).getTime() - new Date(left.hire_date).getTime(),
+    );
+}
+
+export function getHireById(id: string) {
+  return getHires().find((hire) => hire.id === id);
 }
 
 export function getRelatedWorkers(worker: Worker) {

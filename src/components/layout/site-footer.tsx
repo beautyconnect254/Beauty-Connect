@@ -2,27 +2,32 @@ import Link from "next/link";
 
 export function SiteFooter() {
   return (
-    <footer className="border-t border-white/60 bg-white/60">
-      <div className="mx-auto flex w-full max-w-7xl flex-col gap-6 px-4 py-10 sm:px-6 lg:flex-row lg:items-center lg:justify-between lg:px-8">
-        <div className="space-y-2">
-          <p className="font-[family-name:var(--font-display)] text-2xl text-[color:var(--foreground)]">
+    <footer className="border-t border-[color:var(--border)] bg-white">
+      <div className="mx-auto flex w-full max-w-7xl flex-col gap-4 px-3 py-6 sm:px-6 lg:flex-row lg:items-center lg:justify-between lg:px-8">
+        <div className="space-y-1">
+          <p className="text-lg font-extrabold text-[color:var(--foreground)]">
             Beauty Connect
           </p>
-          <p className="max-w-xl text-sm leading-6 text-[color:var(--muted-foreground)]">
-            Curated salon staffing for owners who need trusted beauty talent in
-            dependable, role-based teams.
+          <p className="max-w-xl text-sm leading-5 text-[color:var(--muted-foreground)]">
+            Salon Staffing Solutions for beauty businesses in Kenya and Africa.
           </p>
         </div>
 
-        <div className="flex flex-wrap gap-4 text-sm text-[color:var(--muted-foreground)]">
+        <div className="flex flex-wrap gap-3 text-sm font-semibold text-[color:var(--muted-foreground)]">
+          <Link href="/bookings" className="hover:text-[color:var(--foreground)]">
+            Bookings
+          </Link>
+          <Link href="/hires" className="hover:text-[color:var(--foreground)]">
+            Hires
+          </Link>
           <Link href="/workers" className="hover:text-[color:var(--foreground)]">
-            Browse workers
+            Workers
           </Link>
           <Link
             href="/team-builder"
             className="hover:text-[color:var(--foreground)]"
           >
-            Build a team
+            Build Team
           </Link>
           <Link href="/admin" className="hover:text-[color:var(--foreground)]">
             Admin

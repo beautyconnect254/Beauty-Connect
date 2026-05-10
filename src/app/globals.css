@@ -1,16 +1,18 @@
 @import "tailwindcss";
 
 :root {
-  --background: #f8f2ea;
-  --foreground: #261915;
-  --muted: #f0e4d6;
-  --muted-foreground: #7d6658;
-  --primary: #6f4b36;
-  --primary-foreground: #fff8f0;
-  --secondary: #ebdfd2;
-  --secondary-foreground: #2e1e17;
-  --border: rgba(87, 61, 43, 0.12);
-  --ring: #c79f78;
+  --background: #f6f7fb;
+  --foreground: #171225;
+  --muted: #edf0f5;
+  --muted-foreground: #626875;
+  --primary: #6d28d9;
+  --primary-foreground: #ffffff;
+  --accent: #059669;
+  --secondary: #d1fae5;
+  --secondary-foreground: #064e3b;
+  --border: rgba(48, 36, 82, 0.14);
+  --ring: #10b981;
+  --font-display: var(--font-manrope);
 }
 
 @theme inline {
@@ -36,10 +38,12 @@ body {
   background: var(--background);
   color: var(--foreground);
   background-image:
-    radial-gradient(circle at top left, rgba(223, 195, 167, 0.45), transparent 30%),
-    radial-gradient(circle at top right, rgba(255, 255, 255, 0.95), transparent 35%),
-    linear-gradient(180deg, rgba(255, 255, 255, 0.62), rgba(248, 242, 234, 0.96));
+    linear-gradient(180deg, rgba(109, 40, 217, 0.07), rgba(246, 247, 251, 0) 260px),
+    linear-gradient(rgba(23, 18, 37, 0.035) 1px, transparent 1px),
+    linear-gradient(90deg, rgba(23, 18, 37, 0.035) 1px, transparent 1px);
+  background-size: auto, 28px 28px, 28px 28px;
   font-family: var(--font-manrope), sans-serif;
+  overflow-x: hidden;
 }
 
 a {
@@ -47,7 +51,7 @@ a {
 }
 
 ::selection {
-  background: rgba(199, 159, 120, 0.35);
+  background: rgba(16, 185, 129, 0.24);
 }
 
 @layer base {
@@ -57,7 +61,7 @@ a {
   h4,
   h5,
   h6 {
-    font-family: var(--font-cormorant), serif;
+    font-family: var(--font-display), var(--font-manrope), sans-serif;
     text-wrap: balance;
   }
 

@@ -14,15 +14,17 @@ interface WorkersExplorerProps {
   workers: Worker[];
   skills: SkillRecord[];
   locations: string[];
+  initialRole?: string;
 }
 
 export function WorkersExplorer({
   workers,
   skills,
   locations,
+  initialRole,
 }: WorkersExplorerProps) {
   const [search, setSearch] = useState("");
-  const [selectedRole, setSelectedRole] = useState("all");
+  const [selectedRole, setSelectedRole] = useState(initialRole ?? "all");
   const [selectedSkill, setSelectedSkill] = useState("all");
   const [selectedLocation, setSelectedLocation] = useState("All locations");
   const [availability, setAvailability] = useState("all");
@@ -89,17 +91,17 @@ export function WorkersExplorer({
     });
 
   return (
-    <div className="grid gap-6 lg:grid-cols-[300px_minmax(0,1fr)]">
-      <Card className="h-fit lg:sticky lg:top-28">
+    <div className="grid gap-4 lg:grid-cols-[280px_minmax(0,1fr)]">
+      <Card className="h-fit lg:sticky lg:top-20">
         <CardHeader>
           <div className="flex items-center gap-3">
-            <div className="rounded-full bg-[color:var(--secondary)] p-2 text-[color:var(--primary)]">
+            <div className="rounded-md bg-[color:var(--secondary)] p-2 text-emerald-800">
               <SlidersHorizontal className="h-4 w-4" />
             </div>
-            <CardTitle className="text-2xl">Advanced filters</CardTitle>
+            <CardTitle>Filters</CardTitle>
           </div>
         </CardHeader>
-        <CardContent className="space-y-4">
+        <CardContent className="space-y-3">
           <Input
             value={search}
             onChange={(event) => setSearch(event.target.value)}
@@ -158,7 +160,7 @@ export function WorkersExplorer({
             <option value="salary-low">Lowest salary</option>
           </Select>
 
-          <label className="flex items-center justify-between gap-4 rounded-2xl bg-[color:var(--secondary)] px-4 py-3 text-sm font-medium text-[color:var(--foreground)]">
+          <label className="flex items-center justify-between gap-4 rounded-md bg-[color:var(--secondary)] px-3 py-2.5 text-sm font-bold text-[color:var(--foreground)]">
             Verified workers only
             <input
               checked={verifiedOnly}
@@ -187,37 +189,36 @@ export function WorkersExplorer({
         </CardContent>
       </Card>
 
-      <div className="space-y-5">
+      <div className="space-y-3">
         <Card>
-          <CardContent className="flex flex-col gap-4 p-6 sm:flex-row sm:items-center sm:justify-between">
+          <CardContent className="flex flex-col gap-2 p-3 sm:flex-row sm:items-center sm:justify-between">
             <div>
-              <p className="text-xs font-semibold uppercase tracking-[0.26em] text-[color:var(--muted-foreground)]">
+              <p className="text-[11px] font-bold uppercase text-[color:var(--muted-foreground)]">
                 Results
               </p>
-              <p className="mt-2 font-[family-name:var(--font-display)] text-3xl text-[color:var(--foreground)]">
+              <p className="mt-1 text-lg font-extrabold text-[color:var(--foreground)]">
                 {filteredWorkers.length} worker{filteredWorkers.length === 1 ? "" : "s"} matched
               </p>
             </div>
-            <p className="max-w-xl text-sm leading-6 text-[color:var(--muted-foreground)]">
-              Filters combine role, skill, availability, experience, and verification
-              so salon owners can shortlist fast without scanning every profile.
+            <p className="max-w-xl text-xs leading-5 text-[color:var(--muted-foreground)]">
+              Use filters to find workers who fit the job.
             </p>
           </CardContent>
         </Card>
 
         {filteredWorkers.length > 0 ? (
-          <div className="grid gap-6 md:grid-cols-2 xl:grid-cols-3">
+          <div className="grid grid-cols-2 gap-2.5 sm:grid-cols-2 xl:grid-cols-3">
             {filteredWorkers.map((worker) => (
-              <WorkerCard key={worker.id} worker={worker} />
+              <WorkerCard key={worker.id} worker={worker} compact />
             ))}
           </div>
         ) : (
           <Card>
-            <CardContent className="p-8 text-center">
-              <p className="font-[family-name:var(--font-display)] text-3xl text-[color:var(--foreground)]">
+            <CardContent className="p-4 text-center">
+              <p className="text-lg font-extrabold text-[color:var(--foreground)]">
                 No workers match those filters yet
               </p>
-              <p className="mt-3 text-sm leading-6 text-[color:var(--muted-foreground)]">
+              <p className="mt-2 text-sm leading-5 text-[color:var(--muted-foreground)]">
                 Try widening location or availability to see more verified workers.
               </p>
             </CardContent>

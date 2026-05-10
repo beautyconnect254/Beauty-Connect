@@ -1,16 +1,10 @@
 import type { Metadata } from "next";
-import { Cormorant_Garamond, Manrope } from "next/font/google";
+import { Manrope } from "next/font/google";
 import "./globals.css";
 
 const bodyFont = Manrope({
   variable: "--font-manrope",
   subsets: ["latin"],
-});
-
-const displayFont = Cormorant_Garamond({
-  variable: "--font-cormorant",
-  subsets: ["latin"],
-  weight: ["400", "500", "600", "700"],
 });
 
 export const metadata: Metadata = {
@@ -19,7 +13,7 @@ export const metadata: Metadata = {
     template: "%s | Beauty Connect",
   },
   description:
-    "A curated beauty workforce and staffing platform for salon owners building verified teams.",
+    "Salon staffing for beauty businesses hiring verified workers.",
 };
 
 export default function RootLayout({
@@ -30,7 +24,7 @@ export default function RootLayout({
   return (
     <html
       lang="en"
-      className={`${bodyFont.variable} ${displayFont.variable} h-full scroll-smooth antialiased`}
+      className={`${bodyFont.variable} h-full scroll-smooth antialiased`}
     >
       <body className="flex min-h-full flex-col bg-background text-foreground">
         {children}

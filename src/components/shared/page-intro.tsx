@@ -18,15 +18,15 @@ export function PageIntro({
   className,
 }: PageIntroProps) {
   return (
-    <section className={cn("space-y-6", className)}>
-      <div className="space-y-3">
-        <p className="text-xs font-semibold uppercase tracking-[0.32em] text-[color:var(--muted-foreground)]">
+    <section className={cn("space-y-4", className)}>
+      <div className="space-y-2">
+        <p className="text-[11px] font-bold uppercase text-[color:var(--muted-foreground)]">
           {eyebrow}
         </p>
-        <h1 className="max-w-3xl font-[family-name:var(--font-display)] text-4xl leading-tight tracking-tight text-[color:var(--foreground)] sm:text-5xl">
+        <h1 className="max-w-3xl text-2xl font-extrabold leading-tight text-[color:var(--foreground)] sm:text-3xl">
           {title}
         </h1>
-        <p className="max-w-2xl text-base leading-7 text-[color:var(--muted-foreground)] sm:text-lg">
+        <p className="max-w-2xl text-sm leading-6 text-[color:var(--muted-foreground)]">
           {description}
         </p>
       </div>

@@ -37,8 +37,8 @@ export default function AdminDashboardPage() {
     <div className="space-y-6">
       <PageIntro
         eyebrow="Admin operations"
-        title="Run the curated staffing pipeline from one internal control room."
-        description="Beauty Connect is an admin-led staffing platform, so this dashboard focuses on worker readiness, request urgency, assignment load, and verification throughput."
+        title="Run Worker Requests From One Screen"
+        description="Track worker readiness, urgent requests, assignments, and verification work."
       />
 
       <div className="grid gap-4 md:grid-cols-2 xl:grid-cols-4">
