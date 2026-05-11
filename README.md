@@ -47,6 +47,12 @@ npm run dev
 
 The UI works out of the box with normalized seeded mock data in `src/lib/mock-data.ts`, so you can iterate on the product before wiring live tables and storage.
 
+## Admin access
+
+- Bootstrap admin emails live in `supabase/seed.sql` under `public.admin_email_whitelist`.
+- After signing in, assign or deactivate admins from `/admin/admins`.
+- Admin login uses Supabase magic links, so `NEXT_PUBLIC_APP_URL` must match the deployed URL allowed in Supabase Auth redirect settings.
+
 ## Project structure
 
 - `src/app`: route segments and page entry points

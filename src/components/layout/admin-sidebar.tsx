@@ -11,6 +11,7 @@ import {
   ListPlus,
   LogOut,
   Scissors,
+  ShieldCheck,
   Sparkles,
   UserRoundCheck,
   Users,
@@ -23,6 +24,10 @@ const navGroups = [
   {
     label: "Core",
     items: [{ href: "/admin/dashboard", label: "Dashboard", icon: LayoutDashboard }],
+  },
+  {
+    label: "Access",
+    items: [{ href: "/admin/admins", label: "Admins", icon: ShieldCheck }],
   },
   {
     label: "Workers",

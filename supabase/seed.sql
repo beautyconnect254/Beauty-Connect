@@ -1,3 +1,5 @@
+-- Bootstrap admin whitelist. Add seed admins here, then use /admin/admins
+-- for day-to-day admin access changes after the app is running.
 insert into public.admin_email_whitelist (email, active, added_by)
 values ('brioneroo@gmail.com', true, 'seed')
 on conflict (email) do update
