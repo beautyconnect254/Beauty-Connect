@@ -3,33 +3,88 @@ import type { SupabaseClient, User } from "@supabase/supabase-js";
 
 import {
   ADMIN_ACCESS_TOKEN_COOKIE,
+  isValidAdminEmail,
   normalizeAdminEmail,
 } from "@/lib/admin-auth-shared";
-import { createSupabaseServerClient } from "@/lib/supabase/server";
+import {
+  createSupabaseServerClient,
+  createSupabaseServiceClient,
+} from "@/lib/supabase/server";
 
 export interface AdminSession {
   email: string;
   user: User;
 }
 
-export async function isAdminEmailWhitelisted(
+export interface AdminWhitelistCheck {
+  allowed: boolean;
+  error?: string;
+  source: "bootstrap" | "database" | "none";
+}
+
+const defaultBootstrapAdminEmails = ["brioneroo@gmail.com"];
+
+function getBootstrapAdminEmails() {
+  const configuredEmails = process.env.ADMIN_BOOTSTRAP_EMAILS ?? "";
+
+  return new Set(
+    [...defaultBootstrapAdminEmails, ...configuredEmails.split(",")]
+      .map(normalizeAdminEmail)
+      .filter((email) => email && isValidAdminEmail(email)),
+  );
+}
+
+function isBootstrapAdminEmail(email: string) {
+  return getBootstrapAdminEmails().has(normalizeAdminEmail(email));
+}
+
+export async function checkAdminEmailWhitelisted(
   supabase: SupabaseClient,
   email: string,
-) {
+): Promise<AdminWhitelistCheck> {
   const normalizedEmail = normalizeAdminEmail(email);
 
   const { data, error } = await supabase
     .from("admin_email_whitelist")
-    .select("email")
+    .select("email, active")
     .eq("email", normalizedEmail)
-    .eq("active", true)
     .maybeSingle();
 
-  if (error) {
-    return false;
+  if (data) {
+    return {
+      allowed: Boolean(data.active),
+      source: "database",
+    };
   }
 
-  return Boolean(data);
+  if (error) {
+    return {
+      allowed: isBootstrapAdminEmail(normalizedEmail),
+      error: error.message,
+      source: isBootstrapAdminEmail(normalizedEmail) ? "bootstrap" : "none",
+    };
+  }
+
+  if (isBootstrapAdminEmail(normalizedEmail)) {
+    return {
+      allowed: true,
+      source: "bootstrap",
+    };
+  }
+
+  return {
+    allowed: false,
+    source: "none",
+  };
+}
+
+export async function isAdminEmailWhitelisted(
+  supabase: SupabaseClient,
+  email: string,
+) {
+  const check = await checkAdminEmailWhitelisted(supabase, email);
+
+  return check.allowed;
 }
 
 export async function getAdminSession(): Promise<AdminSession | null> {
@@ -53,7 +108,8 @@ export async function getAdminSession(): Promise<AdminSession | null> {
     return null;
   }
 
-  const allowed = await isAdminEmailWhitelisted(supabase, email);
+  const whitelistClient = createSupabaseServiceClient() ?? supabase;
+  const allowed = await isAdminEmailWhitelisted(whitelistClient, email);
 
   if (!allowed) {
     return null;

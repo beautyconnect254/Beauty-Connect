@@ -1,8 +1,11 @@
 import { NextResponse, type NextRequest } from "next/server";
 
-import { isAdminEmailWhitelisted } from "@/lib/admin-auth";
+import { checkAdminEmailWhitelisted } from "@/lib/admin-auth";
 import { isValidAdminEmail, normalizeAdminEmail } from "@/lib/admin-auth-shared";
-import { createSupabaseServerClient } from "@/lib/supabase/server";
+import {
+  createSupabaseServerClient,
+  createSupabaseServiceClient,
+} from "@/lib/supabase/server";
 
 function getAppOrigin(request: NextRequest) {
   return process.env.NEXT_PUBLIC_APP_URL || request.nextUrl.origin;
@@ -30,9 +33,17 @@ export async function POST(request: NextRequest) {
     );
   }
 
-  const allowed = await isAdminEmailWhitelisted(supabase, email);
+  const whitelistClient = createSupabaseServiceClient() ?? supabase;
+  const whitelistCheck = await checkAdminEmailWhitelisted(whitelistClient, email);
 
-  if (!allowed) {
+  if (!whitelistCheck.allowed) {
+    if (whitelistCheck.error) {
+      return NextResponse.json(
+        { error: `Could not verify admin access: ${whitelistCheck.error}` },
+        { status: 500 },
+      );
+    }
+
     return NextResponse.json(
       { error: "That email is not on the admin access list." },
       { status: 403 },

@@ -6,7 +6,10 @@ import {
   normalizeAdminEmail,
   type AdminWhitelistRecord,
 } from "@/lib/admin-auth-shared";
-import { createSupabaseServerClient } from "@/lib/supabase/server";
+import {
+  createSupabaseServerClient,
+  createSupabaseServiceClient,
+} from "@/lib/supabase/server";
 
 const adminColumns = "email, active, added_by, created_at, updated_at";
 
@@ -25,7 +28,7 @@ async function getAuthorizedSupabase() {
     };
   }
 
-  const supabase = createSupabaseServerClient();
+  const supabase = createSupabaseServiceClient() ?? createSupabaseServerClient();
 
   if (!supabase) {
     return {
