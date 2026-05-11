@@ -12,7 +12,6 @@ const navigation = [
   { href: "/bookings", label: "Bookings" },
   { href: "/hires", label: "Hires" },
   { href: "/workers", label: "Workers" },
-  { href: "/admin", label: "Admin" },
 ];
 
 export function SiteHeader() {

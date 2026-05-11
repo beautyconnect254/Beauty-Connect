@@ -29,9 +29,6 @@ export function SiteFooter() {
           >
             Build Team
           </Link>
-          <Link href="/admin" className="hover:text-[color:var(--foreground)]">
-            Admin
-          </Link>
         </div>
       </div>
     </footer>

@@ -322,6 +322,23 @@ export interface Database {
         };
         Update: Partial<Database["public"]["Tables"]["staffing_assignments"]["Row"]>;
       };
+      admin_email_whitelist: {
+        Row: {
+          email: string;
+          active: boolean;
+          added_by: string;
+          created_at: string;
+          updated_at: string;
+        };
+        Insert: Partial<
+          Database["public"]["Tables"]["admin_email_whitelist"]["Row"]
+        > & {
+          email: string;
+        };
+        Update: Partial<
+          Database["public"]["Tables"]["admin_email_whitelist"]["Row"]
+        >;
+      };
       admin_notes: {
         Row: {
           id: string;
