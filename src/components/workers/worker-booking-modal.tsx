@@ -131,13 +131,13 @@ export function WorkerBookingModal({ worker }: WorkerBookingModalProps) {
       <AnimatePresence>
         {open ? (
           <motion.div
-            className="fixed inset-0 z-50 flex items-end bg-black/35 px-3 py-4 sm:items-center sm:justify-center"
+            className="fixed inset-0 z-[80] flex items-center justify-center bg-black/35 px-3 py-[calc(env(safe-area-inset-bottom)+1rem)]"
             initial={{ opacity: 0 }}
             animate={{ opacity: 1 }}
             exit={{ opacity: 0 }}
           >
             <motion.div
-              className="w-full max-w-md rounded-lg bg-white shadow-xl"
+              className="flex max-h-[calc(100dvh-2rem)] w-full max-w-md flex-col overflow-hidden rounded-lg bg-white shadow-xl"
               initial={{ y: 24, opacity: 0, scale: 0.98 }}
               animate={{ y: 0, opacity: 1, scale: 1 }}
               exit={{ y: 24, opacity: 0, scale: 0.98 }}
@@ -167,10 +167,10 @@ export function WorkerBookingModal({ worker }: WorkerBookingModalProps) {
                   trackingToken={submission.trackingToken}
                   trackingUrl={submission.trackingUrl}
                   onClose={resetAndClose}
-                  className="p-4"
+                  className="overflow-y-auto p-4 pb-[calc(env(safe-area-inset-bottom)+1rem)]"
                 />
               ) : (
-                <div className="space-y-3 p-4">
+                <div className="space-y-3 overflow-y-auto p-4 pb-[calc(env(safe-area-inset-bottom)+1rem)]">
                   <ModalField error={errors.salonName} label="Salon Name">
                     <Input
                       value={form.salonName}

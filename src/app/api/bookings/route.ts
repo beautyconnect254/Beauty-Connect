@@ -1,6 +1,9 @@
 import { randomBytes, randomUUID } from "node:crypto";
 
-import { createSupabaseServerClient } from "@/lib/supabase/server";
+import {
+  createSupabaseServerClient,
+  createSupabaseServiceClient,
+} from "@/lib/supabase/server";
 import type { TeamWorkType } from "@/lib/types";
 
 export const dynamic = "force-dynamic";
@@ -57,7 +60,7 @@ function tokenCandidate() {
 }
 
 async function createTrackingToken(
-  supabase: NonNullable<ReturnType<typeof createSupabaseServerClient>>,
+  supabase: NonNullable<ReturnType<typeof createSupabaseServiceClient>>,
 ) {
   for (let index = 0; index < 8; index += 1) {
     const token = tokenCandidate();
@@ -173,7 +176,7 @@ function validatePayload(payload: BookingPayload) {
 }
 
 async function createTeamRequest(
-  supabase: NonNullable<ReturnType<typeof createSupabaseServerClient>>,
+  supabase: NonNullable<ReturnType<typeof createSupabaseServiceClient>>,
   payload: TeamBookingPayload,
 ) {
   const teamRequestId = `req-${randomUUID()}`;
@@ -245,8 +248,24 @@ async function createTeamRequest(
   return teamRequestId;
 }
 
+function getErrorMessage(error: unknown) {
+  if (error instanceof Error) {
+    return error.message;
+  }
+
+  if (error && typeof error === "object" && "message" in error) {
+    const message = (error as { message?: unknown }).message;
+
+    if (typeof message === "string" && message.trim()) {
+      return message;
+    }
+  }
+
+  return "Could not create booking.";
+}
+
 export async function POST(request: Request) {
-  const supabase = createSupabaseServerClient();
+  const supabase = createSupabaseServiceClient() ?? createSupabaseServerClient();
 
   if (!supabase) {
     return Response.json(
@@ -352,10 +371,14 @@ export async function POST(request: Request) {
         .maybeSingle();
 
       if (workerExists) {
-        await supabase.from("booking_workers").insert({
+        const { error: bookingWorkerError } = await supabase.from("booking_workers").insert({
           booking_id: bookingId,
           worker_id: payload.workerId,
         });
+
+        if (bookingWorkerError) {
+          throw bookingWorkerError;
+        }
       }
     }
 
@@ -367,7 +390,8 @@ export async function POST(request: Request) {
       trackingUrl,
     });
   } catch (error) {
-    const message = error instanceof Error ? error.message : "Could not create booking.";
+    const message = getErrorMessage(error);
+    console.error("Booking creation failed:", message);
     return Response.json({ error: message }, { status: 500 });
   }
 }

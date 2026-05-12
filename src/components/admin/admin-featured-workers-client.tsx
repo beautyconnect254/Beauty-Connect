@@ -19,9 +19,20 @@ export function AdminFeaturedWorkersClient({
   initialWorkers,
 }: AdminFeaturedWorkersClientProps) {
   const [workers, setWorkers] = useState(initialWorkers);
-  const featuredWorkers = workers
-    .filter((worker) => worker.featured || worker.featured_status === "active")
-    .sort((left, right) => right.featured_priority_score - left.featured_priority_score);
+  const visibleWorkers = [...workers].sort((left, right) => {
+    const leftFeatured = left.featured || left.featured_status === "active";
+    const rightFeatured = right.featured || right.featured_status === "active";
+
+    if (leftFeatured !== rightFeatured) {
+      return Number(rightFeatured) - Number(leftFeatured);
+    }
+
+    if (left.featured_priority_score !== right.featured_priority_score) {
+      return right.featured_priority_score - left.featured_priority_score;
+    }
+
+    return left.full_name.localeCompare(right.full_name);
+  });
 
   function updateWorker(workerId: string, updates: Partial<Worker>) {
     setWorkers((current) =>
@@ -39,7 +50,7 @@ export function AdminFeaturedWorkersClient({
           <CardTitle>Featured Workers</CardTitle>
         </div>
         <p className="text-sm text-[color:var(--muted-foreground)]">
-          Manage promoted workers without changing staffing availability.
+          Promote any roster worker without changing staffing availability.
         </p>
       </CardHeader>
       <CardContent className="p-0">
@@ -51,7 +62,7 @@ export function AdminFeaturedWorkersClient({
           <span>Actions</span>
         </div>
         <div className="divide-y divide-[color:var(--border)]">
-          {featuredWorkers.map((worker) => (
+          {visibleWorkers.map((worker) => (
             <div
               key={worker.id}
               className="grid gap-3 px-3 py-3 md:grid-cols-[minmax(220px,1.2fr)_0.7fr_0.7fr_0.7fr_0.7fr] md:items-center"

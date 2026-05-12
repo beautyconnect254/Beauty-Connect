@@ -49,17 +49,6 @@ function roleLabel(role: WorkerRole) {
   return role === "Hair Stylist" ? "Hairstylist" : role;
 }
 
-function shortDate(date: string | null) {
-  if (!date) {
-    return "No expiry";
-  }
-
-  return new Intl.DateTimeFormat("en-KE", {
-    month: "short",
-    day: "numeric",
-  }).format(new Date(date));
-}
-
 export function HomePage({ featuredWorkers, categories }: HomePageProps) {
   const categoryRoles = preferredRoles.filter((role) =>
     categories.some((category) => category.role === role),
@@ -165,21 +154,7 @@ export function HomePage({ featuredWorkers, categories }: HomePageProps) {
         <div className="grid grid-cols-2 gap-2.5 sm:grid-cols-3 lg:grid-cols-4">
           {featuredWorkers.map((worker, index) => (
             <Reveal key={worker.id} delay={index * 0.025}>
-              <div className="space-y-1.5">
-                <WorkerCard worker={worker} compact />
-                <div className="rounded-md border border-[color:var(--border)] bg-white px-2 py-1.5 text-[10px] font-bold text-[color:var(--muted-foreground)]">
-                  <div className="flex items-center justify-between gap-2">
-                    <span className="truncate text-emerald-700">
-                      {worker.featured_status}
-                    </span>
-                    <span className="truncate">Priority {worker.featured_priority_score}</span>
-                  </div>
-                  <div className="mt-0.5 flex items-center justify-between gap-2">
-                    <span>Freq {worker.featured_frequency}</span>
-                    <span>Until {shortDate(worker.featured_expires_at)}</span>
-                  </div>
-                </div>
-              </div>
+              <WorkerCard worker={worker} compact />
             </Reveal>
           ))}
         </div>
