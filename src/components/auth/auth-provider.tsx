@@ -10,7 +10,7 @@ import {
   useState,
   type ReactNode,
 } from "react";
-import { useRouter } from "next/navigation";
+import { usePathname, useRouter } from "next/navigation";
 import type { Session, User } from "@supabase/supabase-js";
 
 import { AuthModal } from "@/components/auth/auth-modal";
@@ -21,6 +21,8 @@ import {
 import {
   AUTH_INTENT_EVENT,
   AUTH_INTENT_STORAGE_KEY,
+  AUTH_CALLBACK_NEXT_PARAM,
+  AUTH_CALLBACK_PATH,
   type AuthIntent,
 } from "@/lib/user-auth-shared";
 
@@ -116,8 +118,48 @@ function defaultDescription(intent: AuthIntent | null) {
   return "Use Google or an email magic link. Your bookings and hires will stay linked to your account.";
 }
 
+function fallbackNextPath() {
+  const next = `${window.location.pathname}${window.location.search}`;
+
+  if (!next || next.startsWith(AUTH_CALLBACK_PATH)) {
+    return "/";
+  }
+
+  return next;
+}
+
+function nextPathForIntent(intent: AuthIntent | null) {
+  if (intent?.type === "navigate") {
+    return intent.href;
+  }
+
+  return fallbackNextPath();
+}
+
+function authHashSession() {
+  const hash = window.location.hash.replace(/^#/, "");
+
+  if (!hash) {
+    return null;
+  }
+
+  const params = new URLSearchParams(hash);
+  const accessToken = params.get("access_token");
+  const refreshToken = params.get("refresh_token");
+
+  if (!accessToken || !refreshToken) {
+    return null;
+  }
+
+  return {
+    access_token: accessToken,
+    refresh_token: refreshToken,
+  };
+}
+
 export function AuthProvider({ children }: { children: ReactNode }) {
   const router = useRouter();
+  const pathname = usePathname();
   const completingIntentRef = useRef(false);
   const [session, setSession] = useState<Session | null>(null);
   const [loading, setLoading] = useState(isSupabaseConfigured);
@@ -139,6 +181,15 @@ export function AuthProvider({ children }: { children: ReactNode }) {
     writeStoredIntent(intent);
     setPendingIntent(intent);
   }, []);
+
+  const getAuthRedirectUrl = useCallback(() => {
+    const intent = pendingIntent ?? readStoredIntent();
+    const url = new URL(AUTH_CALLBACK_PATH, window.location.origin);
+
+    url.searchParams.set(AUTH_CALLBACK_NEXT_PARAM, nextPathForIntent(intent));
+
+    return url.toString();
+  }, [pendingIntent]);
 
   const syncSession = useCallback(async (nextSession: Session | null) => {
     if (!nextSession?.access_token) {
@@ -167,9 +218,61 @@ export function AuthProvider({ children }: { children: ReactNode }) {
     const authClient = supabase;
     let active = true;
 
+    async function consumeCallbackFromCurrentUrl() {
+      if (pathname === AUTH_CALLBACK_PATH) {
+        return null;
+      }
+
+      const url = new URL(window.location.href);
+      const code = url.searchParams.get("code");
+
+      if (code) {
+        const { data, error: exchangeError } =
+          await authClient.auth.exchangeCodeForSession(code);
+
+        if (exchangeError) {
+          throw exchangeError;
+        }
+
+        url.searchParams.delete("code");
+        url.searchParams.delete("state");
+        window.history.replaceState(
+          {},
+          document.title,
+          `${url.pathname}${url.search}${url.hash}`,
+        );
+
+        return data.session;
+      }
+
+      const hashSession = authHashSession();
+
+      if (!hashSession) {
+        return null;
+      }
+
+      const { data, error: setSessionError } =
+        await authClient.auth.setSession(hashSession);
+
+      if (setSessionError) {
+        throw setSessionError;
+      }
+
+      window.history.replaceState(
+        {},
+        document.title,
+        `${url.pathname}${url.search}`,
+      );
+
+      return data.session;
+    }
+
     async function loadSession() {
       setLoading(true);
-      const { data } = await authClient.auth.getSession();
+      const callbackSession = await consumeCallbackFromCurrentUrl();
+      const { data } = callbackSession
+        ? { data: { session: callbackSession } }
+        : await authClient.auth.getSession();
 
       if (!active) {
         return;
@@ -210,7 +313,7 @@ export function AuthProvider({ children }: { children: ReactNode }) {
       active = false;
       subscription.unsubscribe();
     };
-  }, [router, supabase, syncSession]);
+  }, [pathname, router, supabase, syncSession]);
 
   useEffect(() => {
     if (!session?.user || loading || completingIntentRef.current) {
@@ -298,7 +401,7 @@ export function AuthProvider({ children }: { children: ReactNode }) {
     const { error: signInError } = await supabase.auth.signInWithOAuth({
       provider: "google",
       options: {
-        redirectTo: window.location.href,
+        redirectTo: getAuthRedirectUrl(),
       },
     });
 
@@ -321,7 +424,7 @@ export function AuthProvider({ children }: { children: ReactNode }) {
     const { error: signInError } = await supabase.auth.signInWithOtp({
       email,
       options: {
-        emailRedirectTo: window.location.href,
+        emailRedirectTo: getAuthRedirectUrl(),
         shouldCreateUser: true,
       },
     });
