@@ -1,5 +1,7 @@
 import Link from "next/link";
 
+import { ProtectedLink } from "@/components/auth/protected-link";
+
 export function SiteFooter() {
   return (
     <footer className="border-t border-[color:var(--border)] bg-white">
@@ -14,21 +16,30 @@ export function SiteFooter() {
         </div>
 
         <div className="flex flex-wrap gap-3 text-sm font-semibold text-[color:var(--muted-foreground)]">
-          <Link href="/bookings" className="hover:text-[color:var(--foreground)]">
+          <ProtectedLink
+            href="/bookings"
+            intentTitle="Sign in to view bookings"
+            className="hover:text-[color:var(--foreground)]"
+          >
             Bookings
-          </Link>
-          <Link href="/hires" className="hover:text-[color:var(--foreground)]">
+          </ProtectedLink>
+          <ProtectedLink
+            href="/hires"
+            intentTitle="Sign in to view hires"
+            className="hover:text-[color:var(--foreground)]"
+          >
             Hires
-          </Link>
+          </ProtectedLink>
           <Link href="/workers" className="hover:text-[color:var(--foreground)]">
             Workers
           </Link>
-          <Link
+          <ProtectedLink
             href="/team-builder"
+            intentTitle="Sign in to build your team"
             className="hover:text-[color:var(--foreground)]"
           >
             Build Team
-          </Link>
+          </ProtectedLink>
         </div>
       </div>
     </footer>

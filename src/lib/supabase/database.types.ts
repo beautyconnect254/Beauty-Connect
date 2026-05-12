@@ -132,6 +132,7 @@ export interface Database {
       team_requests: {
         Row: {
           id: string;
+          user_id: string | null;
           salon_name: string;
           contact_name: string;
           contact_email: string;
@@ -194,6 +195,7 @@ export interface Database {
       bookings: {
         Row: {
           id: string;
+          user_id: string | null;
           tracking_token: string;
           type: string;
           title: string;
@@ -253,6 +255,7 @@ export interface Database {
       hires: {
         Row: {
           id: string;
+          user_id: string | null;
           booking_id: string;
           title: string;
           status: string;

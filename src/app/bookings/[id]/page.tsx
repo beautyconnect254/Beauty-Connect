@@ -3,34 +3,51 @@ import { notFound } from "next/navigation";
 import { format, parseISO } from "date-fns";
 import { ArrowLeft, CalendarDays, CreditCard, Users } from "lucide-react";
 
+import { ProtectedRouteGate } from "@/components/auth/protected-route-gate";
 import { PaymentInstructionsCard } from "@/components/bookings/payment-instructions-card";
 import {
   BookingStatusBadge,
   PaymentStatusBadge,
 } from "@/components/bookings/workflow-badges";
 import { SiteShell } from "@/components/layout/site-shell";
+import { TrackingLinkCard } from "@/components/shared/tracking-link-card";
 import { WorkerCard } from "@/components/workers/worker-card";
 import { buttonVariants } from "@/components/ui/button";
 import { Card, CardContent } from "@/components/ui/card";
-import { getBookingById, getBookings } from "@/lib/data-access";
+import { getUserBookingById } from "@/lib/data-access";
 import {
   bookingRequiresPayment,
   bookingStatusDescription,
   paymentStatusLabel,
 } from "@/lib/booking-workflow";
+import { getCurrentUser } from "@/lib/user-auth";
 import { cn } from "@/lib/utils";
 
 interface BookingDetailPageProps {
   params: Promise<{ id: string }>;
 }
 
-export function generateStaticParams() {
-  return getBookings().map((booking) => ({ id: booking.id }));
-}
+export const dynamic = "force-dynamic";
 
 export default async function BookingDetailPage({ params }: BookingDetailPageProps) {
   const { id } = await params;
-  const booking = getBookingById(id);
+  const user = await getCurrentUser();
+
+  if (!user) {
+    return (
+      <SiteShell>
+        <div className="mx-auto w-full max-w-5xl space-y-4 px-3 py-5 sm:px-6 lg:px-8 lg:py-8">
+          <ProtectedRouteGate
+            href={`/bookings/${id}`}
+            title="Sign in to view this booking"
+            description="Booking details are private to the account that created the request."
+          />
+        </div>
+      </SiteShell>
+    );
+  }
+
+  const booking = await getUserBookingById(id, user.id);
 
   if (!booking) {
     notFound();
@@ -106,6 +123,8 @@ export default async function BookingDetailPage({ params }: BookingDetailPagePro
         {bookingRequiresPayment(booking) && booking.payment_instructions ? (
           <PaymentInstructionsCard instructions={booking.payment_instructions} />
         ) : null}
+
+        <TrackingLinkCard trackingToken={booking.tracking_token} />
 
         <section className="space-y-3">
           <h2 className="text-lg font-extrabold text-[color:var(--foreground)]">

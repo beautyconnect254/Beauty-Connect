@@ -4,6 +4,7 @@ import Link from "next/link";
 import { usePathname } from "next/navigation";
 import { CalendarCheck, Home, UserCheck } from "lucide-react";
 
+import { ProtectedLink } from "@/components/auth/protected-link";
 import { cn } from "@/lib/utils";
 
 const mobileNavigation = [
@@ -22,20 +23,36 @@ export function MobileBottomNav() {
           const Icon = item.icon;
           const active =
             item.href === "/" ? pathname === item.href : pathname.startsWith(item.href);
+          const protectedItem = item.href === "/bookings" || item.href === "/hires";
+          const className = cn(
+            "flex min-w-0 flex-col items-center justify-center gap-0.5 rounded-md px-2 py-1.5 text-[11px] font-extrabold transition",
+            active
+              ? "bg-[linear-gradient(135deg,var(--primary),var(--accent))] text-white"
+              : "text-[color:var(--muted-foreground)] hover:bg-[color:var(--muted)] hover:text-[color:var(--foreground)]",
+          );
+          const content = (
+            <>
+              <Icon className="h-4 w-4" />
+              <span className="truncate">{item.label}</span>
+            </>
+          );
 
-          return (
+          return protectedItem ? (
+            <ProtectedLink
+              className={className}
+              href={item.href}
+              intentTitle={`Sign in to view ${item.label.toLowerCase()}`}
+              key={item.href}
+            >
+              {content}
+            </ProtectedLink>
+          ) : (
             <Link
               key={item.href}
               href={item.href}
-              className={cn(
-                "flex min-w-0 flex-col items-center justify-center gap-0.5 rounded-md px-2 py-1.5 text-[11px] font-extrabold transition",
-                active
-                  ? "bg-[linear-gradient(135deg,var(--primary),var(--accent))] text-white"
-                  : "text-[color:var(--muted-foreground)] hover:bg-[color:var(--muted)] hover:text-[color:var(--foreground)]",
-              )}
+              className={className}
             >
-              <Icon className="h-4 w-4" />
-              <span className="truncate">{item.label}</span>
+              {content}
             </Link>
           );
         })}

@@ -2,11 +2,16 @@ import { AdminBookingsClient } from "@/components/admin/admin-bookings-client";
 import { PageIntro } from "@/components/shared/page-intro";
 import {
   getAdminActivityLogs,
-  getBookings,
-  getWorkers,
+  getBookingsAsync,
+  getWorkersAsync,
 } from "@/lib/data-access";
 
-export default function AdminConfirmedTeamBookingsPage() {
+export default async function AdminConfirmedTeamBookingsPage() {
+  const [bookings, workers] = await Promise.all([
+    getBookingsAsync(),
+    getWorkersAsync(),
+  ]);
+
   return (
     <div className="space-y-4">
       <PageIntro
@@ -15,8 +20,8 @@ export default function AdminConfirmedTeamBookingsPage() {
         description="Manage reserved teams, client payment instructions, and manual deposit verification."
       />
       <AdminBookingsClient
-        initialBookings={getBookings()}
-        initialWorkers={getWorkers()}
+        initialBookings={bookings}
+        initialWorkers={workers}
         initialActivityLogs={getAdminActivityLogs()}
         status="confirmed"
         type="team"

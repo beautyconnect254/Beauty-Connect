@@ -1,5 +1,4 @@
-import Link from "next/link";
-
+import { ProtectedLink } from "@/components/auth/protected-link";
 import { SiteShell } from "@/components/layout/site-shell";
 import { PageIntro } from "@/components/shared/page-intro";
 import { buttonVariants } from "@/components/ui/button";
@@ -33,9 +32,13 @@ export default async function WorkersPage({ searchParams }: WorkersPageProps) {
           title="Browse Verified Workers"
           description="Filter by role, skill, location, experience, and availability."
           actions={
-            <Link href="/team-builder" className={buttonVariants({ variant: "default" })}>
+            <ProtectedLink
+              href="/team-builder"
+              intentTitle="Sign in to build your team"
+              className={buttonVariants({ variant: "default" })}
+            >
               Build Team
-            </Link>
+            </ProtectedLink>
           }
         />
 

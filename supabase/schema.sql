@@ -386,6 +386,7 @@ create table if not exists public.portfolio_images (
 
 create table if not exists public.team_requests (
   id text primary key,
+  user_id uuid references auth.users(id) on delete set null,
   salon_name text not null,
   contact_name text not null,
   contact_email text not null,
@@ -400,6 +401,9 @@ create table if not exists public.team_requests (
   submitted_at timestamptz not null default now(),
   updated_at timestamptz not null default now()
 );
+
+alter table public.team_requests
+add column if not exists user_id uuid references auth.users(id) on delete set null;
 
 do $$
 begin
@@ -445,6 +449,7 @@ create table if not exists public.team_request_role_specialties (
 
 create table if not exists public.bookings (
   id text primary key,
+  user_id uuid references auth.users(id) on delete set null,
   tracking_token text not null unique,
   type text not null check (type in ('worker', 'team')),
   title text not null,
@@ -458,6 +463,9 @@ create table if not exists public.bookings (
   payment_instructions jsonb,
   updated_at timestamptz not null default now()
 );
+
+alter table public.bookings
+add column if not exists user_id uuid references auth.users(id) on delete set null;
 
 alter table public.bookings
 add column if not exists tracking_token text;
@@ -493,6 +501,7 @@ create table if not exists public.payment_verifications (
 
 create table if not exists public.hires (
   id text primary key,
+  user_id uuid references auth.users(id) on delete set null,
   booking_id text not null references public.bookings(id) on delete restrict,
   title text not null,
   status public.hire_status not null default 'active',
@@ -502,6 +511,32 @@ create table if not exists public.hires (
   created_at timestamptz not null default now(),
   updated_at timestamptz not null default now()
 );
+
+alter table public.hires
+add column if not exists user_id uuid references auth.users(id) on delete set null;
+
+update public.hires hire
+set user_id = booking.user_id
+from public.bookings booking
+where hire.booking_id = booking.id
+  and hire.user_id is null
+  and booking.user_id is not null;
+
+create or replace function public.set_hire_user_id_from_booking()
+returns trigger
+language plpgsql
+as $$
+begin
+  if new.user_id is null then
+    select user_id
+    into new.user_id
+    from public.bookings
+    where id = new.booking_id;
+  end if;
+
+  return new;
+end;
+$$;
 
 create table if not exists public.hire_workers (
   hire_id text not null references public.hires(id) on delete cascade,
@@ -576,10 +611,12 @@ create index if not exists worker_skills_worker_idx on public.worker_skills (wor
 create index if not exists worker_skills_skill_idx on public.worker_skills (skill_id);
 create index if not exists portfolio_images_worker_idx on public.portfolio_images (worker_id);
 create index if not exists team_requests_status_idx on public.team_requests (status);
+create index if not exists team_requests_user_idx on public.team_requests (user_id);
 create index if not exists team_requests_urgency_idx on public.team_requests (urgency);
 create index if not exists team_request_roles_request_idx on public.team_request_roles (team_request_id);
 create index if not exists team_request_role_specialties_role_idx on public.team_request_role_specialties (team_request_role_id);
 create index if not exists bookings_status_idx on public.bookings (status);
+create index if not exists bookings_user_idx on public.bookings (user_id);
 create unique index if not exists bookings_tracking_token_idx on public.bookings (tracking_token);
 create index if not exists bookings_payment_status_idx on public.bookings (payment_status);
 create index if not exists bookings_team_request_idx on public.bookings (team_request_id);
@@ -587,6 +624,7 @@ create index if not exists booking_workers_worker_idx on public.booking_workers 
 create index if not exists payment_verifications_booking_idx on public.payment_verifications (booking_id);
 create index if not exists payment_verifications_status_idx on public.payment_verifications (status);
 create index if not exists hires_booking_idx on public.hires (booking_id);
+create index if not exists hires_user_idx on public.hires (user_id);
 create index if not exists hires_status_idx on public.hires (status);
 create index if not exists hire_workers_worker_idx on public.hire_workers (worker_id);
 create index if not exists verification_documents_worker_idx on public.verification_documents (worker_id);
@@ -642,6 +680,12 @@ create trigger hires_set_updated_at
 before update on public.hires
 for each row
 execute function public.set_updated_at();
+
+drop trigger if exists hires_set_user_id_from_booking on public.hires;
+create trigger hires_set_user_id_from_booking
+before insert or update of booking_id, user_id on public.hires
+for each row
+execute function public.set_hire_user_id_from_booking();
 
 drop trigger if exists admin_email_whitelist_set_updated_at on public.admin_email_whitelist;
 create trigger admin_email_whitelist_set_updated_at

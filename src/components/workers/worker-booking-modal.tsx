@@ -1,14 +1,16 @@
 "use client";
 
 import type { ReactNode } from "react";
-import { useState } from "react";
+import { useEffect, useState } from "react";
 import { AnimatePresence, motion } from "framer-motion";
 import { Send, X } from "lucide-react";
 
+import { useAuth } from "@/components/auth/auth-provider";
 import { BookingTrackingSuccess } from "@/components/bookings/booking-tracking-success";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import type { Worker } from "@/lib/types";
+import { AUTH_INTENT_EVENT, type AuthIntent } from "@/lib/user-auth-shared";
 
 interface WorkerBookingModalProps {
   worker: Worker;
@@ -23,6 +25,8 @@ interface SingleBookingForm {
 }
 
 interface BookingSubmissionResult {
+  bookingId: string;
+  bookingUrl: string;
   trackingUrl: string;
   trackingToken: string;
 }
@@ -36,12 +40,64 @@ const initialForm: SingleBookingForm = {
 };
 
 export function WorkerBookingModal({ worker }: WorkerBookingModalProps) {
+  const {
+    clearPendingIntent,
+    getAccessToken,
+    pendingIntent,
+    requireAuth,
+    user,
+  } = useAuth();
   const [open, setOpen] = useState(false);
   const [form, setForm] = useState(initialForm);
   const [errors, setErrors] = useState<Record<string, string>>({});
   const [isSubmitting, setIsSubmitting] = useState(false);
   const [submission, setSubmission] = useState<BookingSubmissionResult | null>(null);
   const [submitError, setSubmitError] = useState("");
+
+  function openRequestFlow() {
+    setOpen(true);
+  }
+
+  function handleRequestClick() {
+    requireAuth({
+      intent: {
+        type: "worker-request",
+        workerId: worker.id,
+        title: `Sign in to request ${worker.full_name}`,
+      },
+      onAuthenticated: openRequestFlow,
+    });
+  }
+
+  useEffect(() => {
+    if (
+      user &&
+      pendingIntent?.type === "worker-request" &&
+      pendingIntent.workerId === worker.id
+    ) {
+      queueMicrotask(() => {
+        openRequestFlow();
+        clearPendingIntent();
+      });
+    }
+  }, [clearPendingIntent, pendingIntent, user, worker.id]);
+
+  useEffect(() => {
+    function handleAuthIntent(event: Event) {
+      const detail = (event as CustomEvent<AuthIntent>).detail;
+
+      if (detail?.type === "worker-request" && detail.workerId === worker.id) {
+        openRequestFlow();
+        clearPendingIntent();
+      }
+    }
+
+    window.addEventListener(AUTH_INTENT_EVENT, handleAuthIntent);
+
+    return () => {
+      window.removeEventListener(AUTH_INTENT_EVENT, handleAuthIntent);
+    };
+  }, [clearPendingIntent, worker.id]);
 
   function validate() {
     const nextErrors: Record<string, string> = {};
@@ -66,10 +122,12 @@ export function WorkerBookingModal({ worker }: WorkerBookingModalProps) {
     setSubmitError("");
 
     try {
+      const accessToken = getAccessToken();
       const response = await fetch("/api/bookings", {
         method: "POST",
         headers: {
           "Content-Type": "application/json",
+          ...(accessToken ? { Authorization: `Bearer ${accessToken}` } : {}),
         },
         body: JSON.stringify({
           type: "worker",
@@ -124,7 +182,7 @@ export function WorkerBookingModal({ worker }: WorkerBookingModalProps) {
 
   return (
     <>
-      <Button size="sm" onClick={() => setOpen(true)}>
+      <Button size="sm" onClick={handleRequestClick}>
         Request Worker
       </Button>
 
@@ -166,6 +224,7 @@ export function WorkerBookingModal({ worker }: WorkerBookingModalProps) {
                 <BookingTrackingSuccess
                   trackingToken={submission.trackingToken}
                   trackingUrl={submission.trackingUrl}
+                  bookingUrl={submission.bookingUrl}
                   onClose={resetAndClose}
                   className="overflow-y-auto p-4 pb-[calc(env(safe-area-inset-bottom)+1rem)]"
                 />

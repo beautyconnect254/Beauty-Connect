@@ -2,11 +2,16 @@ import { AdminBookingsClient } from "@/components/admin/admin-bookings-client";
 import { PageIntro } from "@/components/shared/page-intro";
 import {
   getAdminActivityLogs,
-  getBookings,
-  getWorkers,
+  getBookingsAsync,
+  getWorkersAsync,
 } from "@/lib/data-access";
 
-export default function AdminPaidSingleBookingsPage() {
+export default async function AdminPaidSingleBookingsPage() {
+  const [bookings, workers] = await Promise.all([
+    getBookingsAsync(),
+    getWorkersAsync(),
+  ]);
+
   return (
     <div className="space-y-4">
       <PageIntro
@@ -15,8 +20,8 @@ export default function AdminPaidSingleBookingsPage() {
         description="Review released single-worker hires, manual payment confirmation, and contact access."
       />
       <AdminBookingsClient
-        initialBookings={getBookings()}
-        initialWorkers={getWorkers()}
+        initialBookings={bookings}
+        initialWorkers={workers}
         initialActivityLogs={getAdminActivityLogs()}
         status="paid"
         type="worker"

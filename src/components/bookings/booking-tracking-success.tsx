@@ -8,6 +8,7 @@ import { buttonVariants, Button } from "@/components/ui/button";
 import { cn } from "@/lib/utils";
 
 interface BookingTrackingSuccessProps {
+  bookingUrl?: string;
   trackingUrl: string;
   trackingToken: string;
   onClose?: () => void;
@@ -35,6 +36,7 @@ function fallbackCopy(value: string) {
 }
 
 export function BookingTrackingSuccess({
+  bookingUrl,
   trackingUrl,
   trackingToken,
   onClose,
@@ -64,8 +66,8 @@ export function BookingTrackingSuccess({
           <div>
             <p className="font-extrabold">Booking submitted successfully.</p>
             <p className="mt-1 text-sm leading-5">
-              Save this tracking link somewhere safe so you can track your
-              booking later.
+              Your request is saved to your account. The tracking link is still
+              available as a backup.
             </p>
           </div>
         </div>
@@ -112,10 +114,10 @@ export function BookingTrackingSuccess({
           </Button>
         ) : null}
         <Link
-          href={`/track/${trackingToken}`}
+          href={bookingUrl ?? `/track/${trackingToken}`}
           className={cn(buttonVariants(), "h-10 w-full")}
         >
-          Track booking
+          View booking
         </Link>
       </div>
     </div>

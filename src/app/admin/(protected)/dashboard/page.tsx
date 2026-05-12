@@ -8,20 +8,22 @@ import { Badge } from "@/components/ui/badge";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import {
   getAdminActivityLogs,
-  getBookings,
-  getDashboardMetrics,
-  getRoleSpecialtyCatalog,
-  getWorkers,
+  getBookingsAsync,
+  getDashboardMetricsAsync,
+  getRoleSpecialtyCatalogAsync,
+  getWorkersAsync,
 } from "@/lib/data-access";
 import { bookingStatusLabel } from "@/lib/booking-workflow";
 import { availabilityLabel } from "@/lib/utils";
 
-export default function AdminDashboardPage() {
-  const metrics = getDashboardMetrics();
-  const bookings = getBookings();
-  const workers = getWorkers();
+export default async function AdminDashboardPage() {
+  const [metrics, bookings, workers, roleCatalog] = await Promise.all([
+    getDashboardMetricsAsync(),
+    getBookingsAsync(),
+    getWorkersAsync(),
+    getRoleSpecialtyCatalogAsync(),
+  ]);
   const activityLogs = getAdminActivityLogs();
-  const roleCatalog = getRoleSpecialtyCatalog();
   const pendingBookings = bookings.filter((booking) => booking.status === "pending");
   const confirmedBookings = bookings.filter(
     (booking) => booking.status === "confirmed",

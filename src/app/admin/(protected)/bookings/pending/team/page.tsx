@@ -2,11 +2,16 @@ import { AdminBookingsClient } from "@/components/admin/admin-bookings-client";
 import { PageIntro } from "@/components/shared/page-intro";
 import {
   getAdminActivityLogs,
-  getBookings,
-  getWorkers,
+  getBookingsAsync,
+  getWorkersAsync,
 } from "@/lib/data-access";
 
-export default function AdminPendingTeamBookingsPage() {
+export default async function AdminPendingTeamBookingsPage() {
+  const [bookings, workers] = await Promise.all([
+    getBookingsAsync(),
+    getWorkersAsync(),
+  ]);
+
   return (
     <div className="space-y-4">
       <PageIntro
@@ -15,8 +20,8 @@ export default function AdminPendingTeamBookingsPage() {
         description="Review requested roles, auto-match available workers, manually verify availability, and confirm reservations."
       />
       <AdminBookingsClient
-        initialBookings={getBookings()}
-        initialWorkers={getWorkers()}
+        initialBookings={bookings}
+        initialWorkers={workers}
         initialActivityLogs={getAdminActivityLogs()}
         status="pending"
         type="team"

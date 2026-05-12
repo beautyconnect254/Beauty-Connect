@@ -137,6 +137,40 @@ function matchesRole(worker: Worker, role: TeamRequestRole) {
   );
 }
 
+async function readAdminError(response: Response) {
+  const body = (await response.json().catch(() => null)) as {
+    error?: string;
+  } | null;
+
+  return body?.error || "Could not save booking update.";
+}
+
+async function persistAdminBookingAction(
+  bookingId: string,
+  payload:
+    | {
+        action: "confirm";
+        workerIds: string[];
+      }
+    | {
+        action: "verify_payment";
+        paymentReference: string;
+        workerIds: string[];
+      },
+) {
+  const response = await fetch(`/api/admin/bookings/${bookingId}`, {
+    method: "PATCH",
+    headers: {
+      "Content-Type": "application/json",
+    },
+    body: JSON.stringify(payload),
+  });
+
+  if (!response.ok) {
+    throw new Error(await readAdminError(response));
+  }
+}
+
 export function AdminBookingsClient({
   initialBookings,
   initialWorkers,
@@ -243,7 +277,7 @@ export function AdminBookingsClient({
     );
   }
 
-  function confirmBooking(booking: Booking) {
+  async function confirmBooking(booking: Booking) {
     const decisions = verification[booking.id] ?? {};
     const confirmedWorkerIds = Object.entries(decisions)
       .filter(([, decision]) => decision === "confirmed_available")
@@ -329,10 +363,22 @@ export function AdminBookingsClient({
       });
     });
 
-    setNotice(`${booking.title} confirmed. Selected workers are now reserved.`);
+    try {
+      await persistAdminBookingAction(booking.id, {
+        action: "confirm",
+        workerIds: confirmedWorkerIds,
+      });
+      setNotice(`${booking.title} confirmed. Selected workers are now reserved.`);
+    } catch (error) {
+      setNotice(
+        `${booking.title} updated in this view, but could not save: ${
+          error instanceof Error ? error.message : "Unknown error"
+        }`,
+      );
+    }
   }
 
-  function verifyPayment(booking: Booking) {
+  async function verifyPayment(booking: Booking) {
     const reference =
       paymentRefs[booking.id]?.trim() ||
       booking.payment_verification?.submitted_reference ||
@@ -397,7 +443,20 @@ export function AdminBookingsClient({
       });
     });
 
-    setNotice(`${booking.title} moved to paid. Worker contacts are released.`);
+    try {
+      await persistAdminBookingAction(booking.id, {
+        action: "verify_payment",
+        paymentReference: reference,
+        workerIds,
+      });
+      setNotice(`${booking.title} moved to paid. Worker contacts are released.`);
+    } catch (error) {
+      setNotice(
+        `${booking.title} updated in this view, but could not save: ${
+          error instanceof Error ? error.message : "Unknown error"
+        }`,
+      );
+    }
   }
 
   function renderWorkerRow(booking: Booking, worker: Worker, role?: TeamRequestRole) {
@@ -554,7 +613,7 @@ export function AdminBookingsClient({
                 Auto-matched by role, sub-specialty, availability, and experience.
               </p>
             </div>
-            <Button onClick={() => confirmBooking(booking)}>
+            <Button onClick={() => void confirmBooking(booking)}>
               <ClipboardCheck className="h-4 w-4" />
               Confirm booking
             </Button>
@@ -696,7 +755,7 @@ export function AdminBookingsClient({
             />
             <Textarea value={instructions.notes} readOnly className="min-h-20" />
             <div className="grid gap-2">
-              <Button onClick={() => verifyPayment(booking)}>
+              <Button onClick={() => void verifyPayment(booking)}>
                 <BadgeCheck className="h-4 w-4" />
                 Verify payment manually
               </Button>

@@ -1,5 +1,7 @@
 import type { Metadata } from "next";
 import { Manrope } from "next/font/google";
+
+import { AuthProvider } from "@/components/auth/auth-provider";
 import "./globals.css";
 
 const bodyFont = Manrope({
@@ -27,7 +29,7 @@ export default function RootLayout({
       className={`${bodyFont.variable} h-full scroll-smooth antialiased`}
     >
       <body className="flex min-h-full flex-col bg-background text-foreground">
-        {children}
+        <AuthProvider>{children}</AuthProvider>
       </body>
     </html>
   );

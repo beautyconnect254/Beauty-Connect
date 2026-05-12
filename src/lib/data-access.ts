@@ -27,9 +27,12 @@ import type {
   AvailabilityStatus,
   Booking,
   BookingRecord,
+  BookingRequestDetails,
   DashboardMetric,
   FeaturedStatus,
   Hire,
+  AdminPaymentVerification,
+  PaymentInstructions,
   RoleSpecialtyCatalog,
   SkillRecord,
   StaffingAssignment,
@@ -61,6 +64,9 @@ const documentStatuses: VerificationDocumentStatus[] = [
   "verified",
   "rejected",
 ];
+const bookingStatuses = ["pending", "confirmed", "paid", "cancelled"] as const;
+const paymentStatuses = ["not_due", "deposit_due", "deposit_paid", "paid"] as const;
+const hireStatuses = ["active", "completed"] as const;
 
 function getReadableSupabaseClient() {
   return createSupabaseServiceClient() ?? createSupabaseServerClient();
@@ -713,6 +719,412 @@ export function getTeamRequestById(id: string) {
   return getTeamRequests().find((request) => request.id === id);
 }
 
+type SupabaseTeamRequestRow = {
+  id: string;
+  user_id?: string | null;
+  salon_name: string;
+  contact_name: string;
+  contact_email: string;
+  contact_whatsapp: string;
+  location: string;
+  verified_only: boolean | null;
+  work_type: string | null;
+  urgency: string | null;
+  status: string | null;
+  notes: string | null;
+  target_start_date: string;
+  submitted_at: string;
+};
+
+type SupabaseTeamRequestRoleRow = {
+  id: string;
+  team_request_id: string;
+  role: string;
+  quantity: number | null;
+  min_experience: number | null;
+};
+
+type SupabaseBookingRow = {
+  id: string;
+  user_id?: string | null;
+  tracking_token: string | null;
+  type: string | null;
+  title: string;
+  status: string | null;
+  payment_status: string | null;
+  booking_date: string;
+  submitted_at: string;
+  team_request_id: string | null;
+  notes: string | null;
+  request_details: unknown;
+  payment_instructions: unknown;
+};
+
+type SupabaseBookingWorkerRow = {
+  booking_id: string;
+  worker_id: string;
+};
+
+type SupabasePaymentVerificationRow = {
+  booking_id: string;
+  status: string | null;
+  submitted_reference: string | null;
+  verified_by: string | null;
+  verified_at: string | null;
+  notes: string | null;
+};
+
+type SupabaseHireRow = {
+  id: string;
+  user_id?: string | null;
+  booking_id: string;
+  title: string;
+  status: string | null;
+  payment_status: string | null;
+  hire_date: string;
+  payment_reference: string | null;
+  created_at: string;
+};
+
+type SupabaseHireWorkerRow = {
+  hire_id: string;
+  worker_id: string;
+};
+
+function isRecord(value: unknown): value is Record<string, unknown> {
+  return Boolean(value) && typeof value === "object" && !Array.isArray(value);
+}
+
+function parseRequestDetails(value: unknown): BookingRequestDetails {
+  return isRecord(value) ? (value as BookingRequestDetails) : {};
+}
+
+function parsePaymentInstructions(value: unknown): PaymentInstructions | null {
+  return isRecord(value) ? (value as unknown as PaymentInstructions) : null;
+}
+
+function parsePaymentVerification(
+  value: SupabasePaymentVerificationRow | undefined,
+): AdminPaymentVerification | null {
+  if (!value) {
+    return null;
+  }
+
+  return {
+    status: pickEnumValue(
+      value.status,
+      ["not_submitted", "submitted", "verified", "rejected"] as const,
+      "not_submitted",
+    ),
+    submitted_reference: value.submitted_reference,
+    verified_by: value.verified_by,
+    verified_at: value.verified_at,
+    notes: value.notes ?? "",
+  };
+}
+
+async function getTeamRequestsFromSupabase(
+  requestIds?: string[],
+): Promise<TeamRequest[]> {
+  const supabase = getReadableSupabaseClient();
+
+  if (!supabase) {
+    return [];
+  }
+
+  let query = supabase
+    .from("team_requests")
+    .select(
+      [
+        "id",
+        "user_id",
+        "salon_name",
+        "contact_name",
+        "contact_email",
+        "contact_whatsapp",
+        "location",
+        "verified_only",
+        "work_type",
+        "urgency",
+        "status",
+        "notes",
+        "target_start_date",
+        "submitted_at",
+      ].join(", "),
+    )
+    .order("submitted_at", { ascending: false });
+
+  if (requestIds?.length) {
+    query = query.in("id", requestIds);
+  }
+
+  const { data: requestRows, error } = await query;
+  const dbRequestRows = (requestRows ?? []) as unknown as SupabaseTeamRequestRow[];
+
+  if (error || dbRequestRows.length === 0) {
+    return [];
+  }
+
+  const ids = dbRequestRows.map((request) => request.id);
+  const [{ data: roleRows }, { data: specialtyRows }, allSkills] =
+    await Promise.all([
+      supabase
+        .from("team_request_roles")
+        .select("id, team_request_id, role, quantity, min_experience")
+        .in("team_request_id", ids),
+      supabase
+        .from("team_request_role_specialties")
+        .select("id, team_request_role_id, skill_id"),
+      getSkillsAsync(),
+    ]);
+  const skillsById = new Map(allSkills.map((skill) => [skill.id, skill]));
+  const specialtiesByRole = new Map<string, SkillRecord[]>();
+
+  (
+    (specialtyRows ?? []) as unknown as Array<{
+      id: string;
+      team_request_role_id: string;
+      skill_id: string;
+    }>
+  ).forEach((specialty) => {
+    const skill = skillsById.get(specialty.skill_id);
+
+    if (!skill) {
+      return;
+    }
+
+    specialtiesByRole.set(specialty.team_request_role_id, [
+      ...(specialtiesByRole.get(specialty.team_request_role_id) ?? []),
+      skill,
+    ]);
+  });
+
+  const rolesByRequest = new Map<string, TeamRequestRole[]>();
+
+  ((roleRows ?? []) as unknown as SupabaseTeamRequestRoleRow[]).forEach((role) => {
+    const hydratedRole: TeamRequestRole = {
+      id: role.id,
+      team_request_id: role.team_request_id,
+      role: role.role,
+      quantity: Math.max(Number(role.quantity) || 0, 0),
+      min_experience: Math.max(Number(role.min_experience) || 0, 0),
+      specialties: specialtiesByRole.get(role.id) ?? [],
+    };
+
+    rolesByRequest.set(role.team_request_id, [
+      ...(rolesByRequest.get(role.team_request_id) ?? []),
+      hydratedRole,
+    ]);
+  });
+
+  return dbRequestRows.map((request) => {
+    const requestedRoles = rolesByRequest.get(request.id) ?? [];
+
+    return {
+      id: request.id,
+      user_id: request.user_id ?? null,
+      salon_name: request.salon_name,
+      contact_name: request.contact_name,
+      contact_email: request.contact_email,
+      contact_whatsapp: request.contact_whatsapp,
+      location: request.location,
+      verified_only: Boolean(request.verified_only),
+      work_type: pickEnumValue(
+        request.work_type,
+        ["long-term-contract", "short-term-contract"] as const,
+        "long-term-contract",
+      ),
+      urgency: pickEnumValue(
+        request.urgency,
+        ["standard", "priority", "urgent"] as const,
+        "priority",
+      ),
+      status: pickEnumValue(
+        request.status,
+        ["new", "reviewing", "staffing", "completed"] as const,
+        "new",
+      ),
+      notes: request.notes ?? "",
+      target_start_date: request.target_start_date,
+      submitted_at: request.submitted_at,
+      requested_roles: requestedRoles,
+      staffing_assignments: [],
+      internal_notes: [],
+      role_recommendations: [],
+      filled_headcount: 0,
+      open_headcount: totalHeadcount(requestedRoles),
+    };
+  });
+}
+
+function hydrateBookingFromSupabase(
+  record: BookingRecord,
+  workersById: Map<string, Worker>,
+  teamRequestsById: Map<string, TeamRequest>,
+): Booking {
+  const hydratedWorkers = record.worker_ids
+    .map((workerId) => workersById.get(workerId))
+    .filter((worker): worker is Worker => Boolean(worker));
+
+  return {
+    ...record,
+    payment_instructions:
+      record.payment_instructions ??
+      (record.status === "confirmed"
+        ? defaultPaymentInstructions({
+            id: record.id,
+            type: record.type,
+            worker_count: hydratedWorkers.length || record.worker_ids.length,
+          })
+        : null),
+    workers: hydratedWorkers,
+    team_request: record.team_request_id
+      ? teamRequestsById.get(record.team_request_id) ?? null
+      : null,
+    worker_count: hydratedWorkers.length,
+  };
+}
+
+async function getBookingsFromSupabase(options?: {
+  bookingId?: string;
+  userId?: string;
+}): Promise<Booking[]> {
+  const supabase = getReadableSupabaseClient();
+
+  if (!supabase) {
+    return [];
+  }
+
+  let query = supabase
+    .from("bookings")
+    .select(
+      [
+        "id",
+        "user_id",
+        "tracking_token",
+        "type",
+        "title",
+        "status",
+        "payment_status",
+        "booking_date",
+        "submitted_at",
+        "team_request_id",
+        "notes",
+        "request_details",
+        "payment_instructions",
+      ].join(", "),
+    )
+    .order("submitted_at", { ascending: false });
+
+  if (options?.userId) {
+    query = query.eq("user_id", options.userId);
+  }
+
+  if (options?.bookingId) {
+    query = query.eq("id", options.bookingId);
+  }
+
+  const { data: bookingRows, error } = await query;
+  const dbBookingRows = (bookingRows ?? []) as unknown as SupabaseBookingRow[];
+
+  if (error || dbBookingRows.length === 0) {
+    return [];
+  }
+
+  const activeRows = dbBookingRows.filter((booking) =>
+    bookingIsActive(
+      pickEnumValue(booking.status, bookingStatuses, "pending"),
+    ),
+  );
+
+  if (activeRows.length === 0) {
+    return [];
+  }
+
+  const bookingIds = activeRows.map((booking) => booking.id);
+  const teamRequestIds = Array.from(
+    new Set(activeRows.map((booking) => booking.team_request_id).filter(Boolean)),
+  ) as string[];
+  const [
+    bookingWorkersResult,
+    paymentVerificationsResult,
+    allWorkers,
+    teamRequestsFromDb,
+  ] = await Promise.all([
+    supabase
+      .from("booking_workers")
+      .select("booking_id, worker_id")
+      .in("booking_id", bookingIds),
+    supabase
+      .from("payment_verifications")
+      .select(
+        "booking_id, status, submitted_reference, verified_by, verified_at, notes",
+      )
+      .in("booking_id", bookingIds)
+      .order("created_at", { ascending: false }),
+    getWorkersAsync(),
+    teamRequestIds.length ? getTeamRequestsFromSupabase(teamRequestIds) : [],
+  ]);
+  const workersById = new Map(allWorkers.map((worker) => [worker.id, worker]));
+  const teamRequestsById = new Map(
+    [
+      ...teamRequestsFromDb,
+      ...getTeamRequests().filter((request) => teamRequestIds.includes(request.id)),
+    ].map((request) => [request.id, request]),
+  );
+  const workerIdsByBooking = new Map<string, string[]>();
+
+  ((bookingWorkersResult.data ?? []) as SupabaseBookingWorkerRow[]).forEach(
+    (item) => {
+      workerIdsByBooking.set(item.booking_id, [
+        ...(workerIdsByBooking.get(item.booking_id) ?? []),
+        item.worker_id,
+      ]);
+    },
+  );
+
+  const paymentVerificationByBooking = new Map<
+    string,
+    SupabasePaymentVerificationRow
+  >();
+
+  (
+    (paymentVerificationsResult.data ?? []) as SupabasePaymentVerificationRow[]
+  ).forEach((item) => {
+    if (!paymentVerificationByBooking.has(item.booking_id)) {
+      paymentVerificationByBooking.set(item.booking_id, item);
+    }
+  });
+
+  return activeRows.map((booking) => {
+    const record: BookingRecord = {
+      id: booking.id,
+      user_id: booking.user_id ?? null,
+      tracking_token: booking.tracking_token,
+      type: pickEnumValue(booking.type, ["worker", "team"] as const, "worker"),
+      title: booking.title,
+      status: pickEnumValue(booking.status, bookingStatuses, "pending"),
+      payment_status: pickEnumValue(
+        booking.payment_status,
+        paymentStatuses,
+        "not_due",
+      ),
+      booking_date: booking.booking_date,
+      submitted_at: booking.submitted_at,
+      worker_ids: workerIdsByBooking.get(booking.id) ?? [],
+      team_request_id: booking.team_request_id,
+      notes: booking.notes ?? "",
+      request_details: parseRequestDetails(booking.request_details),
+      payment_instructions: parsePaymentInstructions(booking.payment_instructions),
+      payment_verification: parsePaymentVerification(
+        paymentVerificationByBooking.get(booking.id),
+      ),
+    };
+
+    return hydrateBookingFromSupabase(record, workersById, teamRequestsById);
+  });
+}
+
 function hydrateBooking(record: BookingRecord): Booking {
   const hydratedWorkers = record.worker_ids
     .map((workerId) => hydrateWorker(workerId))
@@ -745,8 +1157,26 @@ export function getBookings() {
     );
 }
 
+export async function getBookingsAsync() {
+  return mergeById(await getBookingsFromSupabase(), getBookings());
+}
+
 export function getBookingById(id: string) {
   return getBookings().find((booking) => booking.id === id);
+}
+
+export async function getBookingByIdAsync(id: string) {
+  return (await getBookingsAsync()).find((booking) => booking.id === id);
+}
+
+export async function getUserBookings(userId: string) {
+  return getBookingsFromSupabase({ userId });
+}
+
+export async function getUserBookingById(id: string, userId: string) {
+  return (await getBookingsFromSupabase({ bookingId: id, userId })).find(
+    (booking) => booking.id === id,
+  );
 }
 
 export function getHires(): Hire[] {
@@ -770,8 +1200,130 @@ export function getHires(): Hire[] {
     );
 }
 
+async function getHiresFromSupabase(options?: {
+  hireId?: string;
+  userId?: string;
+}): Promise<Hire[]> {
+  const supabase = getReadableSupabaseClient();
+
+  if (!supabase) {
+    return [];
+  }
+
+  let query = supabase
+    .from("hires")
+    .select(
+      [
+        "id",
+        "user_id",
+        "booking_id",
+        "title",
+        "status",
+        "payment_status",
+        "hire_date",
+        "payment_reference",
+        "created_at",
+      ].join(", "),
+    )
+    .order("created_at", { ascending: false });
+
+  if (options?.userId) {
+    query = query.eq("user_id", options.userId);
+  }
+
+  if (options?.hireId) {
+    query = query.eq("id", options.hireId);
+  }
+
+  const { data: hireRows, error } = await query;
+  const rows = (hireRows ?? []) as unknown as SupabaseHireRow[];
+
+  if (error || rows.length === 0) {
+    return [];
+  }
+
+  const hireIds = rows.map((hire) => hire.id);
+  const bookingIds = rows.map((hire) => hire.booking_id);
+  const [hireWorkersResult, bookingsFromDb, allWorkers] = await Promise.all([
+    supabase
+      .from("hire_workers")
+      .select("hire_id, worker_id")
+      .in("hire_id", hireIds),
+    Promise.all(
+      bookingIds.map((bookingId) =>
+        getBookingsFromSupabase({
+          bookingId,
+          userId: options?.userId,
+        }),
+      ),
+    ).then((items) => items.flat()),
+    getWorkersAsync(),
+  ]);
+  const bookingsById = new Map(bookingsFromDb.map((booking) => [booking.id, booking]));
+  const workersById = new Map(allWorkers.map((worker) => [worker.id, worker]));
+  const workerIdsByHire = new Map<string, string[]>();
+
+  ((hireWorkersResult.data ?? []) as SupabaseHireWorkerRow[]).forEach((item) => {
+    workerIdsByHire.set(item.hire_id, [
+      ...(workerIdsByHire.get(item.hire_id) ?? []),
+      item.worker_id,
+    ]);
+  });
+
+  return rows
+    .map((hire) => {
+      const sourceBooking = bookingsById.get(hire.booking_id) ?? null;
+      const workerIds =
+        workerIdsByHire.get(hire.id) ?? sourceBooking?.worker_ids ?? [];
+      const hydratedWorkers = workerIds
+        .map((workerId) => workersById.get(workerId))
+        .filter((worker): worker is Worker => Boolean(worker));
+
+      return {
+        id: hire.id,
+        user_id: hire.user_id ?? sourceBooking?.user_id ?? null,
+        booking_id: hire.booking_id,
+        title: hire.title,
+        status: pickEnumValue(hire.status, hireStatuses, "active"),
+        payment_status: pickEnumValue(
+          hire.payment_status,
+          paymentStatuses,
+          "paid",
+        ),
+        hire_date: hire.hire_date,
+        worker_ids: workerIds,
+        payment_reference: hire.payment_reference ?? "Verified manually",
+        booking: sourceBooking,
+        workers: hydratedWorkers,
+        worker_count: hydratedWorkers.length,
+      } satisfies Hire;
+    })
+    .sort(
+      (left, right) =>
+        new Date(right.hire_date).getTime() - new Date(left.hire_date).getTime(),
+    );
+}
+
+export async function getHiresAsync() {
+  return mergeById(await getHiresFromSupabase(), getHires());
+}
+
 export function getHireById(id: string) {
   return getHires().find((hire) => hire.id === id);
+}
+
+export async function getHireByIdAsync(id: string) {
+  return (await getHiresAsync()).find((hire) => hire.id === id);
+}
+
+export async function getUserHires(userId: string) {
+  return getHiresFromSupabase({ userId });
+}
+
+export async function getUserHireById(id: string, userId: string) {
+  return (await getHiresFromSupabase({ hireId: id, userId })).find(
+    (hire) => hire.id === id,
+  );
 }
 
 export function getRelatedWorkers(worker: Worker) {
@@ -894,6 +1446,51 @@ export function getDashboardMetrics(): DashboardMetric[] {
       label: "Reserved workers",
       value: String(
         hydratedAssignments.filter((assignment) => assignment.status === "reserved").length,
+      ),
+      detail: "Workers secured for confirmed bookings and blocked from future matching.",
+    },
+  ];
+}
+
+export async function getDashboardMetricsAsync(): Promise<DashboardMetric[]> {
+  const [hydratedWorkers, hydratedBookings] = await Promise.all([
+    getWorkersAsync(),
+    getBookingsAsync(),
+  ]);
+  const hydratedAssignments = getStaffingAssignments();
+
+  return [
+    {
+      label: "Active workers",
+      value: String(
+        hydratedWorkers.filter((worker) => worker.verification_status !== "rejected")
+          .length,
+      ),
+      detail: "Recruited workers currently in the internal staffing pipeline.",
+    },
+    {
+      label: "Available workers",
+      value: String(
+        hydratedWorkers.filter(
+          (worker) =>
+            worker.availability_status === "available" &&
+            worker.verification_status === "verified",
+        ).length,
+      ),
+      detail: "Verified workers currently free for matching and reservation.",
+    },
+    {
+      label: "Pending bookings",
+      value: String(
+        hydratedBookings.filter((booking) => booking.status === "pending").length,
+      ),
+      detail: "Bookings waiting on matching and manual worker availability checks.",
+    },
+    {
+      label: "Reserved workers",
+      value: String(
+        hydratedAssignments.filter((assignment) => assignment.status === "reserved")
+          .length,
       ),
       detail: "Workers secured for confirmed bookings and blocked from future matching.",
     },

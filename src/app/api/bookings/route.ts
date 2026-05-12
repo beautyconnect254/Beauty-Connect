@@ -5,6 +5,7 @@ import {
   createSupabaseServiceClient,
 } from "@/lib/supabase/server";
 import type { TeamWorkType } from "@/lib/types";
+import { getAuthenticatedUserFromRequest } from "@/lib/user-auth";
 
 export const dynamic = "force-dynamic";
 
@@ -178,10 +179,12 @@ function validatePayload(payload: BookingPayload) {
 async function createTeamRequest(
   supabase: NonNullable<ReturnType<typeof createSupabaseServiceClient>>,
   payload: TeamBookingPayload,
+  userId: string,
 ) {
   const teamRequestId = `req-${randomUUID()}`;
   const { error: requestError } = await supabase.from("team_requests").insert({
     id: teamRequestId,
+    user_id: userId,
     salon_name: payload.salonName,
     contact_name: payload.contactName,
     contact_email: payload.contactEmail || "not-provided@beautyconnect.local",
@@ -274,6 +277,15 @@ export async function POST(request: Request) {
     );
   }
 
+  const user = await getAuthenticatedUserFromRequest(request);
+
+  if (!user) {
+    return Response.json(
+      { error: "Sign in before creating a booking." },
+      { status: 401 },
+    );
+  }
+
   let payload: BookingPayload | null = null;
 
   try {
@@ -300,7 +312,9 @@ export async function POST(request: Request) {
         ? payload.targetStartDate
         : payload.preferredStartDate || new Date().toISOString().slice(0, 10);
     const teamRequestId =
-      payload.type === "team" ? await createTeamRequest(supabase, payload) : null;
+      payload.type === "team"
+        ? await createTeamRequest(supabase, payload, user.id)
+        : null;
     const title =
       payload.type === "team"
         ? `${payload.salonName} team booking`
@@ -347,6 +361,7 @@ export async function POST(request: Request) {
 
     const { error: bookingError } = await supabase.from("bookings").insert({
       id: bookingId,
+      user_id: user.id,
       tracking_token: trackingToken,
       type: payload.type,
       title,
@@ -386,6 +401,7 @@ export async function POST(request: Request) {
 
     return Response.json({
       bookingId,
+      bookingUrl: `/bookings/${bookingId}`,
       trackingToken,
       trackingUrl,
     });

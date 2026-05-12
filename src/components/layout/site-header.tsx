@@ -2,9 +2,12 @@
 
 import Link from "next/link";
 import { usePathname } from "next/navigation";
-import { Scissors } from "lucide-react";
+import { LogOut, Scissors, UserCircle } from "lucide-react";
+import { useState } from "react";
 
-import { buttonVariants } from "@/components/ui/button";
+import { ProtectedLink } from "@/components/auth/protected-link";
+import { useAuth } from "@/components/auth/auth-provider";
+import { Button, buttonVariants } from "@/components/ui/button";
 import { cn } from "@/lib/utils";
 
 const navigation = [
@@ -16,6 +19,8 @@ const navigation = [
 
 export function SiteHeader() {
   const pathname = usePathname();
+  const { loading, openAuthModal, signOut, user } = useAuth();
+  const [profileOpen, setProfileOpen] = useState(false);
 
   return (
     <header className="sticky top-0 z-50 border-b border-[color:var(--border)] bg-white/95 backdrop-blur">
@@ -40,17 +45,29 @@ export function SiteHeader() {
               item.href === "/"
                 ? pathname === item.href
                 : pathname.startsWith(item.href);
+            const protectedItem =
+              item.href === "/bookings" || item.href === "/hires";
+            const className = cn(
+              "rounded-md px-3 py-1.5 text-xs font-bold transition",
+              active
+                ? "bg-[linear-gradient(135deg,var(--primary),var(--accent))] text-white"
+                : "text-[color:var(--muted-foreground)] hover:bg-white hover:text-[color:var(--foreground)]",
+            );
 
-            return (
+            return protectedItem ? (
+              <ProtectedLink
+                className={className}
+                href={item.href}
+                intentTitle={`Sign in to view ${item.label.toLowerCase()}`}
+                key={item.href}
+              >
+                {item.label}
+              </ProtectedLink>
+            ) : (
               <Link
                 key={item.href}
                 href={item.href}
-                className={cn(
-                  "rounded-md px-3 py-1.5 text-xs font-bold transition",
-                  active
-                    ? "bg-[linear-gradient(135deg,var(--primary),var(--accent))] text-white"
-                    : "text-[color:var(--muted-foreground)] hover:bg-white hover:text-[color:var(--foreground)]",
-                )}
+                className={className}
               >
                 {item.label}
               </Link>
@@ -58,15 +75,62 @@ export function SiteHeader() {
           })}
         </nav>
 
-        <Link
-          href="/team-builder"
-          className={cn(
-            buttonVariants({ variant: "default", size: "sm" }),
-            "hidden sm:inline-flex",
+        <div className="relative flex shrink-0 items-center gap-2">
+          <ProtectedLink
+            href="/team-builder"
+            intentTitle="Sign in to build your team"
+            className={cn(
+              buttonVariants({ variant: "default", size: "sm" }),
+              "hidden sm:inline-flex",
+            )}
+          >
+            Build Team
+          </ProtectedLink>
+
+          {user ? (
+            <>
+              <Button
+                size="sm"
+                variant="outline"
+                onClick={() => setProfileOpen((current) => !current)}
+              >
+                <UserCircle className="h-4 w-4" />
+                Profile
+              </Button>
+              {profileOpen ? (
+                <div className="absolute right-0 top-[calc(100%+0.5rem)] w-64 rounded-lg border border-[color:var(--border)] bg-white p-3 shadow-xl">
+                  <p className="text-[10px] font-extrabold uppercase text-[color:var(--muted-foreground)]">
+                    Signed in
+                  </p>
+                  <p className="mt-1 truncate text-sm font-extrabold text-[color:var(--foreground)]">
+                    {user.email ?? "Beauty Connect user"}
+                  </p>
+                  <Button
+                    className="mt-3 w-full"
+                    onClick={() => {
+                      setProfileOpen(false);
+                      void signOut();
+                    }}
+                    size="sm"
+                    variant="outline"
+                  >
+                    <LogOut className="h-4 w-4" />
+                    Log out
+                  </Button>
+                </div>
+              ) : null}
+            </>
+          ) : (
+            <Button
+              size="sm"
+              variant="outline"
+              disabled={loading}
+              onClick={() => openAuthModal()}
+            >
+              Login / Sign Up
+            </Button>
           )}
-        >
-          Build Team
-        </Link>
+        </div>
       </div>
     </header>
   );

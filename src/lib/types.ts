@@ -96,6 +96,7 @@ export interface WorkerReferenceRecord {
 
 export interface TeamRequestRecord {
   id: string;
+  user_id?: string | null;
   salon_name: string;
   contact_name: string;
   contact_email: string;
@@ -173,6 +174,7 @@ export interface StaffingAssignmentRecord {
 
 export interface BookingRecord {
   id: string;
+  user_id?: string | null;
   tracking_token: string | null;
   type: BookingType;
   title: string;
@@ -190,6 +192,7 @@ export interface BookingRecord {
 
 export interface HireRecord {
   id: string;
+  user_id?: string | null;
   booking_id: string;
   title: string;
   status: HireStatus;

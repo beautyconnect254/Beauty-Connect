@@ -1,13 +1,17 @@
-import Link from "next/link";
-
+import { ProtectedLink } from "@/components/auth/protected-link";
+import { ProtectedRouteGate } from "@/components/auth/protected-route-gate";
 import { BookingsClient } from "@/components/bookings/bookings-client";
 import { SiteShell } from "@/components/layout/site-shell";
 import { PageIntro } from "@/components/shared/page-intro";
 import { buttonVariants } from "@/components/ui/button";
-import { getBookings } from "@/lib/data-access";
+import { getUserBookings } from "@/lib/data-access";
+import { getCurrentUser } from "@/lib/user-auth";
 
-export default function BookingsPage() {
-  const bookings = getBookings();
+export const dynamic = "force-dynamic";
+
+export default async function BookingsPage() {
+  const user = await getCurrentUser();
+  const bookings = user ? await getUserBookings(user.id) : [];
 
   return (
     <SiteShell>
@@ -17,13 +21,25 @@ export default function BookingsPage() {
           title="Reservation Pipeline"
           description="Pending bookings are reviewed by Beauty Connect. Confirmed bookings show payment instructions; contacts unlock only in Hires."
           actions={
-            <Link href="/team-builder" className={buttonVariants({ variant: "default" })}>
+            <ProtectedLink
+              href="/team-builder"
+              intentTitle="Sign in to build your team"
+              className={buttonVariants({ variant: "default" })}
+            >
               Build Team
-            </Link>
+            </ProtectedLink>
           }
         />
 
-        <BookingsClient bookings={bookings} />
+        {user ? (
+          <BookingsClient bookings={bookings} />
+        ) : (
+          <ProtectedRouteGate
+            href="/bookings"
+            title="Sign in to view bookings"
+            description="Bookings are now connected to your account and persist across devices."
+          />
+        )}
       </div>
     </SiteShell>
   );

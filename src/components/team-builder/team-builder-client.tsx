@@ -14,6 +14,7 @@ import {
   X,
 } from "lucide-react";
 
+import { useAuth } from "@/components/auth/auth-provider";
 import { BookingTrackingSuccess } from "@/components/bookings/booking-tracking-success";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
@@ -47,6 +48,8 @@ interface DraftRole {
 }
 
 interface BookingSubmissionResult {
+  bookingId: string;
+  bookingUrl: string;
   trackingUrl: string;
   trackingToken: string;
   submittedAt: string;
@@ -144,6 +147,7 @@ function validateEmail(value: string) {
 }
 
 export function TeamBuilderClient({ roleCatalog }: TeamBuilderClientProps) {
+  const { getAccessToken } = useAuth();
   const [stepIndex, setStepIndex] = useState(0);
   const [draft, setDraft] = useState<DraftRequest>(defaultDraft);
   const [roles, setRoles] = useState<DraftRole[]>(
@@ -236,10 +240,12 @@ export function TeamBuilderClient({ roleCatalog }: TeamBuilderClientProps) {
     setSubmitError("");
 
     try {
+      const accessToken = getAccessToken();
       const response = await fetch("/api/bookings", {
         method: "POST",
         headers: {
           "Content-Type": "application/json",
+          ...(accessToken ? { Authorization: `Bearer ${accessToken}` } : {}),
         },
         body: JSON.stringify({
           type: "team",
@@ -662,7 +668,7 @@ export function TeamBuilderClient({ roleCatalog }: TeamBuilderClientProps) {
                     Request sent
                   </h2>
                   <p className="mt-1 text-sm text-[color:var(--muted-foreground)]">
-                    Keep your tracking link before leaving this page.
+                    Your team request is saved to your account.
                   </p>
                 </div>
                 <button
@@ -678,6 +684,7 @@ export function TeamBuilderClient({ roleCatalog }: TeamBuilderClientProps) {
                 <BookingTrackingSuccess
                   trackingToken={submission.trackingToken}
                   trackingUrl={submission.trackingUrl}
+                  bookingUrl={submission.bookingUrl}
                   onClose={() => setSubmission(null)}
                 />
                 <div className="rounded-md border border-[color:var(--border)] p-3">

@@ -3,25 +3,42 @@ import { notFound } from "next/navigation";
 import { format, parseISO } from "date-fns";
 import { ArrowLeft, CalendarCheck, CreditCard, Users } from "lucide-react";
 
+import { ProtectedRouteGate } from "@/components/auth/protected-route-gate";
 import { HireContactCard } from "@/components/hires/hire-contact-card";
 import { SiteShell } from "@/components/layout/site-shell";
+import { TrackingLinkCard } from "@/components/shared/tracking-link-card";
 import { Badge } from "@/components/ui/badge";
 import { buttonVariants } from "@/components/ui/button";
 import { Card, CardContent } from "@/components/ui/card";
-import { getHireById, getHires } from "@/lib/data-access";
+import { getUserHireById } from "@/lib/data-access";
+import { getCurrentUser } from "@/lib/user-auth";
 import { cn } from "@/lib/utils";
 
 interface HireDetailPageProps {
   params: Promise<{ id: string }>;
 }
 
-export function generateStaticParams() {
-  return getHires().map((hire) => ({ id: hire.id }));
-}
+export const dynamic = "force-dynamic";
 
 export default async function HireDetailPage({ params }: HireDetailPageProps) {
   const { id } = await params;
-  const hire = getHireById(id);
+  const user = await getCurrentUser();
+
+  if (!user) {
+    return (
+      <SiteShell>
+        <div className="mx-auto w-full max-w-5xl space-y-4 px-3 py-5 sm:px-6 lg:px-8 lg:py-8">
+          <ProtectedRouteGate
+            href={`/hires/${id}`}
+            title="Sign in to view this hire"
+            description="Hire details and contact access are private to the account that owns the booking."
+          />
+        </div>
+      </SiteShell>
+    );
+  }
+
+  const hire = await getUserHireById(id, user.id);
 
   if (!hire) {
     notFound();
@@ -81,6 +98,8 @@ export default async function HireDetailPage({ params }: HireDetailPageProps) {
             </div>
           </CardContent>
         </Card>
+
+        <TrackingLinkCard trackingToken={hire.booking?.tracking_token ?? null} />
 
         <section className="space-y-3">
           <h2 className="text-lg font-extrabold text-[color:var(--foreground)]">

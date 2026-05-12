@@ -2,6 +2,7 @@ import Image from "next/image";
 import Link from "next/link";
 import { ArrowRight, CheckCircle2 } from "lucide-react";
 
+import { ProtectedLink } from "@/components/auth/protected-link";
 import { Reveal } from "@/components/motion/reveal";
 import { WorkerCard } from "@/components/workers/worker-card";
 import { buttonVariants } from "@/components/ui/button";
@@ -84,8 +85,9 @@ export function HomePage({ featuredWorkers, categories }: HomePageProps) {
             </div>
 
             <div className="flex flex-wrap gap-2">
-              <Link
+              <ProtectedLink
                 href="/team-builder"
+                intentTitle="Sign in to build your team"
                 className={cn(
                   buttonVariants({ variant: "secondary", size: "sm" }),
                   "bg-emerald-400 text-emerald-950 hover:bg-emerald-300",
@@ -93,7 +95,7 @@ export function HomePage({ featuredWorkers, categories }: HomePageProps) {
               >
                 Build Team
                 <ArrowRight className="h-4 w-4" />
-              </Link>
+              </ProtectedLink>
               <Link
                 href="/workers"
                 className={cn(
