@@ -44,6 +44,7 @@ npm run dev
 - Schema: `supabase/schema.sql`
 - Starter seed data: `supabase/seed.sql`
 - Browser/server helpers: `src/lib/supabase`
+- Worker profile and catalog uploads use the public `worker-media` Storage bucket. The schema creates/updates that bucket, and the admin upload API also verifies it at upload time.
 
 The UI works out of the box with normalized seeded mock data in `src/lib/mock-data.ts`, so you can iterate on the product before wiring live tables and storage.
 
@@ -53,6 +54,7 @@ The UI works out of the box with normalized seeded mock data in `src/lib/mock-da
 - After signing in, assign or deactivate admins from `/admin/admins`.
 - `ADMIN_BOOTSTRAP_EMAILS` can hold comma-separated emergency admin emails for first access.
 - Set `SUPABASE_SERVICE_ROLE_KEY` on the server/Vercel so admin whitelist reads and writes do not depend on public table permissions.
+- `SUPABASE_SERVICE_ROLE_KEY` is also required for secure admin media uploads and bucket initialization from `/api/admin/worker-media`.
 - Admin login uses Supabase magic links, so `NEXT_PUBLIC_APP_URL` must match the deployed URL allowed in Supabase Auth redirect settings.
 
 ## Project structure

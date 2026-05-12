@@ -1,8 +1,15 @@
 "use client";
 
 import Image from "next/image";
-import { useEffect, useMemo, useState } from "react";
-import { ImagePlus, ListChecks, Save, UserRoundPlus } from "lucide-react";
+import { useMemo, useState } from "react";
+import {
+  AlertCircle,
+  ImagePlus,
+  ListChecks,
+  Loader2,
+  Save,
+  UserRoundPlus,
+} from "lucide-react";
 
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
@@ -10,8 +17,10 @@ import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Input } from "@/components/ui/input";
 import { Select } from "@/components/ui/select";
 import { Textarea } from "@/components/ui/textarea";
+import { compressImageFile } from "@/lib/image-compression";
 import type { RoleSpecialtyCatalog, Worker, WorkerRole } from "@/lib/types";
 import { availabilityLabel, cn } from "@/lib/utils";
+import { WORKER_MEDIA_MAX_FILES_PER_UPLOAD } from "@/lib/worker-media";
 
 interface AdminWorkerOnboardingClientProps {
   initialWorkers: Worker[];
@@ -72,9 +81,10 @@ export function AdminWorkerOnboardingClient({
   const defaultRole = roleCatalog[0]?.role ?? "Barber";
   const [workers, setWorkers] = useState(initialWorkers);
   const [draft, setDraft] = useState(createBlankDraft(defaultRole));
-  const [profilePreview, setProfilePreview] = useState("");
-  const [portfolioPreviews, setPortfolioPreviews] = useState<string[]>([]);
   const [notice, setNotice] = useState("");
+  const [uploadError, setUploadError] = useState("");
+  const [uploadingProfile, setUploadingProfile] = useState(false);
+  const [uploadingCatalog, setUploadingCatalog] = useState(false);
   const roles = useMemo(() => roleCatalog.map((role) => role.role), [roleCatalog]);
   const skillsForRole = useMemo(
     () =>
@@ -86,16 +96,7 @@ export function AdminWorkerOnboardingClient({
     .split("\n")
     .map((item) => item.trim())
     .filter(Boolean);
-
-  useEffect(() => {
-    return () => {
-      if (profilePreview) {
-        URL.revokeObjectURL(profilePreview);
-      }
-
-      portfolioPreviews.forEach((url) => URL.revokeObjectURL(url));
-    };
-  }, [portfolioPreviews, profilePreview]);
+  const isUploading = uploadingProfile || uploadingCatalog;
 
   function toggleSkill(skillId: string) {
     setDraft((current) => ({
@@ -104,6 +105,139 @@ export function AdminWorkerOnboardingClient({
         ? current.selected_skill_ids.filter((id) => id !== skillId)
         : [...current.selected_skill_ids, skillId],
     }));
+  }
+
+  function formatBytes(bytes: number) {
+    if (bytes < 1024 * 1024) {
+      return `${Math.max(1, Math.round(bytes / 1024))} KB`;
+    }
+
+    return `${(bytes / (1024 * 1024)).toFixed(1)} MB`;
+  }
+
+  function getUploadError(error: unknown) {
+    return error instanceof Error ? error.message : "Image upload failed.";
+  }
+
+  function appendPortfolioUrls(urls: string[]) {
+    setDraft((current) => {
+      const existingUrls = current.portfolio_urls
+        .split("\n")
+        .map((item) => item.trim())
+        .filter(Boolean);
+      const uniqueUrls = Array.from(new Set([...existingUrls, ...urls]));
+
+      return {
+        ...current,
+        portfolio_urls: uniqueUrls.join("\n"),
+      };
+    });
+  }
+
+  async function uploadWorkerMedia(
+    files: File[],
+    kind: "profile" | "portfolio",
+  ) {
+    const formData = new FormData();
+    formData.append("kind", kind);
+    formData.append("workerName", draft.full_name.trim());
+    files.forEach((file) => formData.append("files", file));
+
+    const response = await fetch("/api/admin/worker-media", {
+      method: "POST",
+      body: formData,
+    });
+    const body = (await response.json().catch(() => null)) as {
+      error?: string;
+      uploads?: Array<{
+        publicUrl: string;
+        size: number;
+      }>;
+    } | null;
+
+    if (!response.ok) {
+      throw new Error(body?.error ?? "Image upload failed.");
+    }
+
+    return body?.uploads ?? [];
+  }
+
+  async function uploadProfilePhoto(file: File) {
+    setUploadingProfile(true);
+    setUploadError("");
+
+    try {
+      const compressedFile = await compressImageFile(file, {
+        maxWidth: 900,
+        maxHeight: 900,
+        quality: 0.78,
+      });
+      const [upload] = await uploadWorkerMedia([compressedFile], "profile");
+
+      if (!upload?.publicUrl) {
+        throw new Error("Supabase did not return a profile photo URL.");
+      }
+
+      setDraft((current) => ({ ...current, profile_photo: upload.publicUrl }));
+      setNotice(
+        `Profile photo uploaded (${formatBytes(file.size)} to ${formatBytes(
+          compressedFile.size,
+        )}).`,
+      );
+    } catch (error) {
+      setUploadError(getUploadError(error));
+    } finally {
+      setUploadingProfile(false);
+    }
+  }
+
+  async function uploadCatalogImages(files: File[]) {
+    if (files.length === 0) {
+      return;
+    }
+
+    if (files.length > WORKER_MEDIA_MAX_FILES_PER_UPLOAD) {
+      setUploadError(
+        `Upload ${WORKER_MEDIA_MAX_FILES_PER_UPLOAD} catalog images or fewer at a time.`,
+      );
+      return;
+    }
+
+    setUploadingCatalog(true);
+    setUploadError("");
+
+    try {
+      const compressedFiles = await Promise.all(
+        files.map((file) =>
+          compressImageFile(file, {
+            maxWidth: 1400,
+            maxHeight: 1400,
+            quality: 0.74,
+          }),
+        ),
+      );
+      const uploads = await uploadWorkerMedia(compressedFiles, "portfolio");
+      const urls = uploads.map((upload) => upload.publicUrl).filter(Boolean);
+
+      if (urls.length !== compressedFiles.length) {
+        throw new Error("Some catalog images did not return public URLs.");
+      }
+
+      appendPortfolioUrls(urls);
+      setNotice(
+        `Uploaded ${urls.length} catalog image${
+          urls.length === 1 ? "" : "s"
+        } (${formatBytes(
+          files.reduce((total, file) => total + file.size, 0),
+        )} to ${formatBytes(
+          compressedFiles.reduce((total, file) => total + file.size, 0),
+        )}).`,
+      );
+    } catch (error) {
+      setUploadError(getUploadError(error));
+    } finally {
+      setUploadingCatalog(false);
+    }
   }
 
   function saveWorker() {
@@ -164,8 +298,7 @@ export function AdminWorkerOnboardingClient({
 
     setWorkers((current) => [nextWorker, ...current]);
     setDraft(createBlankDraft(defaultRole));
-    setProfilePreview("");
-    setPortfolioPreviews([]);
+    setUploadError("");
     setNotice(`${nextWorker.full_name} was added to the internal onboarding roster.`);
   }
 
@@ -189,6 +322,12 @@ export function AdminWorkerOnboardingClient({
           {notice ? (
             <div className="rounded-md border border-[color:var(--border)] bg-[color:var(--muted)] px-3 py-2 text-sm font-semibold text-[color:var(--foreground)]">
               {notice}
+            </div>
+          ) : null}
+          {uploadError ? (
+            <div className="flex items-start gap-2 rounded-md border border-red-200 bg-red-50 px-3 py-2 text-sm font-semibold text-red-700">
+              <AlertCircle className="mt-0.5 h-4 w-4 shrink-0" />
+              <p>{uploadError}</p>
             </div>
           ) : null}
 
@@ -372,20 +511,27 @@ export function AdminWorkerOnboardingClient({
                 <Input
                   type="file"
                   accept="image/*"
+                  disabled={uploadingProfile}
                   onChange={(event) => {
-                    if (profilePreview) {
-                      URL.revokeObjectURL(profilePreview);
-                    }
-
                     const file = event.target.files?.[0];
-                    setProfilePreview(file ? URL.createObjectURL(file) : "");
+                    event.currentTarget.value = "";
+
+                    if (file) {
+                      void uploadProfilePhoto(file);
+                    }
                   }}
                 />
-                {draft.profile_photo || profilePreview ? (
+                {uploadingProfile ? (
+                  <div className="flex items-center gap-2 rounded-md border border-[color:var(--border)] bg-[color:var(--muted)] px-3 py-2 text-sm font-semibold text-[color:var(--foreground)]">
+                    <Loader2 className="h-4 w-4 animate-spin" />
+                    Uploading profile photo...
+                  </div>
+                ) : null}
+                {draft.profile_photo ? (
                   <div className="relative aspect-[4/3] overflow-hidden rounded-md bg-[color:var(--muted)]">
                     {/* eslint-disable-next-line @next/next/no-img-element */}
                     <img
-                      src={profilePreview || draft.profile_photo}
+                      src={draft.profile_photo}
                       alt="Profile preview"
                       className="h-full w-full object-cover"
                     />
@@ -404,17 +550,21 @@ export function AdminWorkerOnboardingClient({
                   type="file"
                   accept="image/*"
                   multiple
+                  disabled={uploadingCatalog}
                   onChange={(event) => {
-                    portfolioPreviews.forEach((url) => URL.revokeObjectURL(url));
-                    setPortfolioPreviews(
-                      Array.from(event.target.files ?? []).map((file) =>
-                        URL.createObjectURL(file),
-                      ),
-                    );
+                    const files = Array.from(event.target.files ?? []);
+                    event.currentTarget.value = "";
+                    void uploadCatalogImages(files);
                   }}
                 />
+                {uploadingCatalog ? (
+                  <div className="flex items-center gap-2 rounded-md border border-[color:var(--border)] bg-[color:var(--muted)] px-3 py-2 text-sm font-semibold text-[color:var(--foreground)]">
+                    <Loader2 className="h-4 w-4 animate-spin" />
+                    Uploading catalog images...
+                  </div>
+                ) : null}
                 <div className="grid grid-cols-3 gap-2">
-                  {[...portfolioUrls, ...portfolioPreviews].slice(0, 6).map((imageUrl) => (
+                  {portfolioUrls.slice(0, 6).map((imageUrl) => (
                     <div
                       className="relative aspect-square overflow-hidden rounded-md bg-[color:var(--muted)]"
                       key={imageUrl}
@@ -452,9 +602,9 @@ export function AdminWorkerOnboardingClient({
               <ListChecks className="h-4 w-4" />
               Reserved and hired workers are blocked from matching automatically.
             </div>
-            <Button onClick={saveWorker}>
+            <Button disabled={isUploading} onClick={saveWorker}>
               <Save className="h-4 w-4" />
-              Save worker
+              {isUploading ? "Uploading..." : "Save worker"}
             </Button>
           </div>
         </CardContent>

@@ -1,5 +1,40 @@
 create extension if not exists pgcrypto;
 
+insert into storage.buckets (
+  id,
+  name,
+  public,
+  file_size_limit,
+  allowed_mime_types
+)
+values (
+  'worker-media',
+  'worker-media',
+  true,
+  2097152,
+  array[
+    'image/avif',
+    'image/webp',
+    'image/jpeg',
+    'image/png'
+  ]
+)
+on conflict (id) do update
+set
+  public = excluded.public,
+  file_size_limit = excluded.file_size_limit,
+  allowed_mime_types = excluded.allowed_mime_types;
+
+do $$
+begin
+  create policy "Worker media public read"
+  on storage.objects
+  for select
+  using (bucket_id = 'worker-media');
+exception
+  when duplicate_object then null;
+end $$;
+
 do $$
 begin
   if not exists (
