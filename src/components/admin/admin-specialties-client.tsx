@@ -1,270 +1,281 @@
 "use client";
 
 import { useMemo, useState } from "react";
-import { BadgePlus, Layers3, Plus, Scissors } from "lucide-react";
+import { BadgePlus, Plus, Scissors, X } from "lucide-react";
 
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Input } from "@/components/ui/input";
-import { Select } from "@/components/ui/select";
-import { Textarea } from "@/components/ui/textarea";
 import type { RoleSpecialtyCatalog, WorkerRole } from "@/lib/types";
+import { cn } from "@/lib/utils";
 
 interface AdminSpecialtiesClientProps {
   initialCatalog: RoleSpecialtyCatalog[];
-  mode: "roles" | "sub-specialties";
-}
-
-function slugify(value: string) {
-  return value.toLowerCase().replace(/[^a-z0-9]+/g, "-").replace(/^-|-$/g, "");
 }
 
 export function AdminSpecialtiesClient({
   initialCatalog,
-  mode,
 }: AdminSpecialtiesClientProps) {
   const [catalog, setCatalog] = useState(initialCatalog);
-  const [roleName, setRoleName] = useState("");
-  const [roleDescription, setRoleDescription] = useState("");
-  const [roleUse, setRoleUse] = useState("");
+  const [titleName, setTitleName] = useState("");
   const [selectedRole, setSelectedRole] = useState<WorkerRole>(
     initialCatalog[0]?.role ?? "Barber",
   );
   const [specialtyName, setSpecialtyName] = useState("");
+  const [notice, setNotice] = useState("");
+  const [saving, setSaving] = useState(false);
   const selectedRoleRecord = useMemo(
     () => catalog.find((role) => role.role === selectedRole) ?? catalog[0],
     [catalog, selectedRole],
   );
 
-  function addRole() {
-    const name = roleName.trim();
+  async function addTitleSpeciality() {
+    const name = titleName.trim();
 
     if (!name || catalog.some((role) => role.role.toLowerCase() === name.toLowerCase())) {
       return;
     }
 
-    setCatalog((current) => [
-      ...current,
-      {
-        role: name,
-        description: roleDescription.trim(),
-        typical_team_use: roleUse.trim(),
-        specialties: [],
-      },
-    ]);
-    setSelectedRole(name);
-    setRoleName("");
-    setRoleDescription("");
-    setRoleUse("");
+    setSaving(true);
+    setNotice("");
+
+    try {
+      const response = await fetch("/api/admin/specialties", {
+        method: "POST",
+        headers: {
+          "Content-Type": "application/json",
+        },
+        body: JSON.stringify({ type: "title", name }),
+      });
+      const body = (await response.json().catch(() => null)) as {
+        error?: string;
+        role?: RoleSpecialtyCatalog;
+      } | null;
+
+      if (!response.ok || !body?.role) {
+        throw new Error(body?.error ?? "Could not add title speciality.");
+      }
+
+      setCatalog((current) => [...current, body.role as RoleSpecialtyCatalog]);
+      setSelectedRole(body.role.role);
+      setTitleName("");
+      setNotice(`${body.role.role} was added.`);
+    } catch (error) {
+      setNotice(
+        error instanceof Error ? error.message : "Could not add title speciality.",
+      );
+    } finally {
+      setSaving(false);
+    }
   }
 
-  function updateRole(
-    role: WorkerRole,
-    field: "description" | "typical_team_use",
-    value: string,
-  ) {
-    setCatalog((current) =>
-      current.map((item) =>
-        item.role === role
-          ? {
-              ...item,
-              [field]: value,
-            }
-          : item,
-      ),
-    );
-  }
-
-  function addSpecialty() {
+  async function addSubSpeciality() {
     const name = specialtyName.trim();
 
     if (!name || !selectedRoleRecord) {
       return;
     }
 
-    setCatalog((current) =>
-      current.map((role) =>
-        role.role === selectedRoleRecord.role
-          ? {
-              ...role,
-              specialties: role.specialties.some(
-                (specialty) => specialty.name.toLowerCase() === name.toLowerCase(),
-              )
-                ? role.specialties
-                : [
-                    ...role.specialties,
-                    {
-                      id: `skill-${slugify(role.role)}-${slugify(name)}`,
-                      name,
-                      role: role.role,
-                    },
-                  ],
-            }
-          : role,
-      ),
-    );
-    setSpecialtyName("");
+    setSaving(true);
+    setNotice("");
+
+    try {
+      const response = await fetch("/api/admin/specialties", {
+        method: "POST",
+        headers: {
+          "Content-Type": "application/json",
+        },
+        body: JSON.stringify({
+          type: "sub-speciality",
+          role: selectedRoleRecord.role,
+          name,
+        }),
+      });
+      const body = (await response.json().catch(() => null)) as {
+        error?: string;
+        skill?: { id: string; name: string; role: string };
+      } | null;
+
+      if (!response.ok || !body?.skill) {
+        throw new Error(body?.error ?? "Could not add sub-speciality.");
+      }
+
+      const nextSkill = body.skill;
+
+      setCatalog((current) =>
+        current.map((role) =>
+          role.role === selectedRoleRecord.role
+            ? {
+                ...role,
+                specialties: role.specialties.some(
+                  (specialty) => specialty.name.toLowerCase() === name.toLowerCase(),
+                )
+                  ? role.specialties
+                  : [...role.specialties, nextSkill],
+              }
+            : role,
+        ),
+      );
+      setSpecialtyName("");
+      setNotice(`${name} was added under ${selectedRoleRecord.role}.`);
+    } catch (error) {
+      setNotice(
+        error instanceof Error ? error.message : "Could not add sub-speciality.",
+      );
+    } finally {
+      setSaving(false);
+    }
   }
 
-  function removeSpecialty(role: WorkerRole, specialtyId: string) {
-    setCatalog((current) =>
-      current.map((item) =>
-        item.role === role
-          ? {
-              ...item,
-              specialties: item.specialties.filter(
-                (specialty) => specialty.id !== specialtyId,
-              ),
-            }
-          : item,
-      ),
-    );
-  }
+  async function removeSubSpeciality(
+    role: WorkerRole,
+    specialtyId: string,
+    specialtyNameToRemove: string,
+  ) {
+    setSaving(true);
+    setNotice("");
 
-  if (mode === "roles") {
-    return (
-      <div className="grid gap-4 xl:grid-cols-[360px_minmax(0,1fr)]">
-        <Card className="h-fit">
-          <CardHeader className="border-b border-[color:var(--border)]">
-            <CardTitle>Create Role</CardTitle>
-          </CardHeader>
-          <CardContent className="space-y-3">
-            <Input
-              value={roleName}
-              onChange={(event) => setRoleName(event.target.value)}
-              placeholder="Barber, Hairstylist, Spa Specialist"
-            />
-            <Textarea
-              value={roleDescription}
-              onChange={(event) => setRoleDescription(event.target.value)}
-              placeholder="Operational description"
-            />
-            <Textarea
-              value={roleUse}
-              onChange={(event) => setRoleUse(event.target.value)}
-              placeholder="Typical team use"
-            />
-            <Button onClick={addRole} className="w-full">
-              <Plus className="h-4 w-4" />
-              Add role
-            </Button>
-          </CardContent>
-        </Card>
+    try {
+      const response = await fetch("/api/admin/specialties", {
+        method: "DELETE",
+        headers: {
+          "Content-Type": "application/json",
+        },
+        body: JSON.stringify({
+          role,
+          specialtyId,
+          specialtyName: specialtyNameToRemove,
+        }),
+      });
+      const body = (await response.json().catch(() => null)) as {
+        error?: string;
+      } | null;
 
-        <Card>
-          <CardHeader className="border-b border-[color:var(--border)]">
-            <div className="flex items-center gap-2">
-              <Scissors className="h-4 w-4" />
-              <CardTitle>Roles</CardTitle>
-            </div>
-          </CardHeader>
-          <CardContent className="grid gap-3 md:grid-cols-2">
-            {catalog.map((role) => (
-              <div
-                key={role.role}
-                className="space-y-3 rounded-md border border-[color:var(--border)] bg-white p-3"
-              >
-                <div className="flex items-center justify-between gap-3">
-                  <div>
-                    <p className="text-sm font-extrabold text-[color:var(--foreground)]">
-                      {role.role}
-                    </p>
-                    <p className="text-xs text-[color:var(--muted-foreground)]">
-                      {role.specialties.length} sub-specialties
-                    </p>
-                  </div>
-                  <Badge variant="outline">Dynamic</Badge>
-                </div>
-                <Textarea
-                  value={role.description}
-                  onChange={(event) =>
-                    updateRole(role.role, "description", event.target.value)
-                  }
-                  className="min-h-20"
-                />
-                <Textarea
-                  value={role.typical_team_use}
-                  onChange={(event) =>
-                    updateRole(role.role, "typical_team_use", event.target.value)
-                  }
-                  className="min-h-20"
-                />
-              </div>
-            ))}
-          </CardContent>
-        </Card>
-      </div>
-    );
+      if (!response.ok) {
+        throw new Error(body?.error ?? "Could not remove sub-speciality.");
+      }
+
+      setCatalog((current) =>
+        current.map((item) =>
+          item.role === role
+            ? {
+                ...item,
+                specialties: item.specialties.filter(
+                  (specialty) => specialty.id !== specialtyId,
+                ),
+              }
+            : item,
+        ),
+      );
+      setNotice(`${specialtyNameToRemove} was removed.`);
+    } catch (error) {
+      setNotice(
+        error instanceof Error ? error.message : "Could not remove sub-speciality.",
+      );
+    } finally {
+      setSaving(false);
+    }
   }
 
   return (
-    <div className="grid gap-4 xl:grid-cols-[360px_minmax(0,1fr)]">
-      <Card className="h-fit">
+    <div className="grid gap-4 lg:grid-cols-[280px_minmax(0,1fr)]">
+      <Card className="h-fit lg:sticky lg:top-4">
         <CardHeader className="border-b border-[color:var(--border)]">
-          <CardTitle>Add Sub-Specialty</CardTitle>
+          <div className="flex items-center gap-2">
+            <Scissors className="h-4 w-4" />
+            <CardTitle>Title Specialities</CardTitle>
+          </div>
         </CardHeader>
         <CardContent className="space-y-3">
-          <Select
-            value={selectedRole}
-            onChange={(event) => setSelectedRole(event.target.value)}
-          >
+          <div className="grid gap-2">
+            <Input
+              value={titleName}
+              onChange={(event) => setTitleName(event.target.value)}
+              placeholder="Barber, Braider, Stylist"
+            />
+            <Button
+              onClick={() => void addTitleSpeciality()}
+              className="w-full"
+              disabled={saving}
+            >
+              <Plus className="h-4 w-4" />
+              Add title
+            </Button>
+          </div>
+
+          <div className="grid gap-1.5">
             {catalog.map((role) => (
-              <option key={role.role} value={role.role}>
-                {role.role}
-              </option>
+              <button
+                key={role.role}
+                type="button"
+                onClick={() => setSelectedRole(role.role)}
+                className={cn(
+                  "flex items-center justify-between gap-2 rounded-md px-3 py-2 text-left text-sm font-extrabold transition",
+                  selectedRoleRecord?.role === role.role
+                    ? "bg-[color:var(--foreground)] text-white"
+                    : "bg-[color:var(--muted)] text-[color:var(--foreground)] hover:bg-emerald-100",
+                )}
+              >
+                <span className="truncate">{role.role}</span>
+                <span className="shrink-0 text-xs opacity-80">
+                  {role.specialties.length}
+                </span>
+              </button>
             ))}
-          </Select>
-          <Input
-            value={specialtyName}
-            onChange={(event) => setSpecialtyName(event.target.value)}
-            placeholder="Fade Specialist, Razor Styling"
-          />
-          <Button onClick={addSpecialty} className="w-full">
-            <BadgePlus className="h-4 w-4" />
-            Add sub-specialty
-          </Button>
+          </div>
         </CardContent>
       </Card>
 
       <Card>
         <CardHeader className="border-b border-[color:var(--border)]">
-          <div className="flex items-center gap-2">
-            <Layers3 className="h-4 w-4" />
-            <CardTitle>Nested Specialty Catalog</CardTitle>
+          <div className="flex flex-col gap-2 sm:flex-row sm:items-center sm:justify-between">
+            <CardTitle>{selectedRoleRecord?.role ?? "Speciality"}</CardTitle>
+            <Badge variant="outline">
+              {selectedRoleRecord?.specialties.length ?? 0} sub-specialities
+            </Badge>
           </div>
         </CardHeader>
-        <CardContent className="grid gap-3 md:grid-cols-2">
-          {catalog.map((role) => (
-            <div
-              key={role.role}
-              className="rounded-md border border-[color:var(--border)] bg-white p-3"
-            >
-              <div className="mb-3 flex items-center justify-between gap-3">
-                <div>
-                  <p className="text-sm font-extrabold text-[color:var(--foreground)]">
-                    {role.role}
-                  </p>
-                  <p className="text-xs text-[color:var(--muted-foreground)]">
-                    Powers onboarding, team builder, filters, and matching.
-                  </p>
-                </div>
-                <Badge variant="outline">{role.specialties.length}</Badge>
-              </div>
-              <div className="flex flex-wrap gap-2">
-                {role.specialties.map((specialty) => (
-                  <button
-                    type="button"
-                    key={specialty.id}
-                    onClick={() => removeSpecialty(role.role, specialty.id)}
-                    className="rounded-full border border-[color:var(--border)] px-3 py-1.5 text-xs font-extrabold text-[color:var(--foreground)] hover:bg-[color:var(--muted)]"
-                  >
-                    {specialty.name}
-                  </button>
-                ))}
-              </div>
+        <CardContent className="space-y-4">
+          {notice ? (
+            <div className="rounded-md border border-[color:var(--border)] bg-[color:var(--muted)] px-3 py-2 text-sm font-semibold text-[color:var(--foreground)]">
+              {notice}
             </div>
-          ))}
+          ) : null}
+          <div className="grid gap-2 sm:grid-cols-[minmax(0,1fr)_auto]">
+            <Input
+              value={specialtyName}
+              onChange={(event) => setSpecialtyName(event.target.value)}
+              placeholder="Fade Specialist, Knotless Braids"
+            />
+            <Button onClick={() => void addSubSpeciality()} disabled={saving}>
+              <BadgePlus className="h-4 w-4" />
+              Add sub-speciality
+            </Button>
+          </div>
+
+          {selectedRoleRecord ? (
+            <div className="flex flex-wrap gap-2">
+              {selectedRoleRecord.specialties.map((specialty) => (
+                <button
+                  type="button"
+                  key={specialty.id}
+                  onClick={() =>
+                    void removeSubSpeciality(
+                      selectedRoleRecord.role,
+                      specialty.id,
+                      specialty.name,
+                    )
+                  }
+                  disabled={saving}
+                  className="inline-flex max-w-full items-center gap-1.5 rounded-full border border-[color:var(--border)] bg-white px-3 py-1.5 text-xs font-extrabold text-[color:var(--foreground)] hover:bg-[color:var(--muted)]"
+                >
+                  <span className="truncate">{specialty.name}</span>
+                  <X className="h-3 w-3 shrink-0" />
+                </button>
+              ))}
+            </div>
+          ) : null}
         </CardContent>
       </Card>
     </div>

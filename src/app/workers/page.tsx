@@ -4,7 +4,12 @@ import { SiteShell } from "@/components/layout/site-shell";
 import { PageIntro } from "@/components/shared/page-intro";
 import { buttonVariants } from "@/components/ui/button";
 import { WorkersExplorer } from "@/components/workers/workers-explorer";
-import { getLocations, getPublicWorkers, getSkills } from "@/lib/data-access";
+import {
+  getPublicWorkersAsync,
+  getSkillsAsync,
+} from "@/lib/data-access";
+
+export const dynamic = "force-dynamic";
 
 interface WorkersPageProps {
   searchParams: Promise<{ role?: string }>;
@@ -12,6 +17,13 @@ interface WorkersPageProps {
 
 export default async function WorkersPage({ searchParams }: WorkersPageProps) {
   const { role } = await searchParams;
+  const [workers, skills] = await Promise.all([
+    getPublicWorkersAsync(),
+    getSkillsAsync(),
+  ]);
+  const locations = Array.from(
+    new Set(workers.map((worker) => worker.location)),
+  ).sort();
 
   return (
     <SiteShell>
@@ -28,9 +40,9 @@ export default async function WorkersPage({ searchParams }: WorkersPageProps) {
         />
 
         <WorkersExplorer
-          workers={getPublicWorkers()}
-          skills={getSkills()}
-          locations={getLocations()}
+          workers={workers}
+          skills={skills}
+          locations={locations}
           initialRole={role}
         />
       </div>

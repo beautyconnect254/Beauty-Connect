@@ -1,0 +1,301 @@
+import { randomUUID } from "node:crypto";
+
+import { revalidatePath } from "next/cache";
+import { NextResponse, type NextRequest } from "next/server";
+
+import { getAdminSession } from "@/lib/admin-auth";
+import { createSupabaseServiceClient } from "@/lib/supabase/server";
+import type { AvailabilityStatus, SkillRecord, Worker, WorkerRole } from "@/lib/types";
+
+export const runtime = "nodejs";
+
+const availabilityStatuses: AvailabilityStatus[] = [
+  "available",
+  "reserved",
+  "hired",
+];
+
+interface WorkerCreatePayload {
+  full_name: string;
+  whatsapp_number: string;
+  id_number: string;
+  profile_photo: string;
+  portfolio_urls: string[];
+  years_of_experience: number;
+  bio: string;
+  primary_role: WorkerRole;
+  location: string;
+  selected_skills: SkillRecord[];
+  availability_status: AvailabilityStatus;
+  listed_publicly: boolean;
+}
+
+function cleanText(value: unknown) {
+  return typeof value === "string" ? value.trim() : "";
+}
+
+function cleanNumber(value: unknown) {
+  const number = Number(value);
+
+  return Number.isFinite(number) ? Math.max(Math.floor(number), 0) : 0;
+}
+
+function slugify(value: string) {
+  return value.toLowerCase().replace(/[^a-z0-9]+/g, "-").replace(/^-|-$/g, "");
+}
+
+function errorResponse(message: string, status: number) {
+  return NextResponse.json({ error: message }, { status });
+}
+
+function normalizePayload(input: unknown): WorkerCreatePayload | null {
+  if (!input || typeof input !== "object") {
+    return null;
+  }
+
+  const record = input as Record<string, unknown>;
+  const selectedSkills = Array.isArray(record.selected_skills)
+    ? record.selected_skills
+        .map((skill) => {
+          const skillRecord = skill as Record<string, unknown>;
+
+          return {
+            id: cleanText(skillRecord.id),
+            name: cleanText(skillRecord.name),
+            role: cleanText(skillRecord.role),
+          };
+        })
+        .filter((skill) => skill.id && skill.name && skill.role)
+    : [];
+  const availability = cleanText(record.availability_status);
+
+  return {
+    full_name: cleanText(record.full_name),
+    whatsapp_number: cleanText(record.whatsapp_number),
+    id_number: cleanText(record.id_number),
+    profile_photo: cleanText(record.profile_photo),
+    portfolio_urls: Array.isArray(record.portfolio_urls)
+      ? record.portfolio_urls.map(cleanText).filter(Boolean)
+      : [],
+    years_of_experience: cleanNumber(record.years_of_experience),
+    bio: cleanText(record.bio),
+    primary_role: cleanText(record.primary_role),
+    location: cleanText(record.location) || "Nairobi",
+    selected_skills: selectedSkills,
+    availability_status: availabilityStatuses.includes(availability as AvailabilityStatus)
+      ? (availability as AvailabilityStatus)
+      : "available",
+    listed_publicly: Boolean(record.listed_publicly),
+  };
+}
+
+function validatePayload(payload: WorkerCreatePayload) {
+  if (!payload.full_name) {
+    return "Worker name is required before saving.";
+  }
+
+  if (!payload.whatsapp_number) {
+    return "WhatsApp number is required before saving.";
+  }
+
+  if (!payload.primary_role) {
+    return "Choose a title speciality before saving.";
+  }
+
+  if (payload.listed_publicly && !payload.profile_photo) {
+    return "Add a profile photo before publishing this worker to /workers.";
+  }
+
+  return "";
+}
+
+export async function POST(request: NextRequest) {
+  const adminSession = await getAdminSession();
+
+  if (!adminSession) {
+    return errorResponse("Admin session required.", 401);
+  }
+
+  const supabase = createSupabaseServiceClient();
+
+  if (!supabase) {
+    return errorResponse(
+      "SUPABASE_SERVICE_ROLE_KEY is required to save workers.",
+      503,
+    );
+  }
+
+  let payload: WorkerCreatePayload | null = null;
+
+  try {
+    payload = normalizePayload(await request.json());
+  } catch {
+    return errorResponse("Invalid worker payload.", 400);
+  }
+
+  if (!payload) {
+    return errorResponse("Invalid worker payload.", 400);
+  }
+
+  const validationError = validatePayload(payload);
+
+  if (validationError) {
+    return errorResponse(validationError, 400);
+  }
+
+  const workerId = `worker-${slugify(payload.full_name) || "profile"}-${randomUUID().slice(0, 8)}`;
+  const verificationStatus = payload.listed_publicly ? "verified" : "pending";
+  const bio =
+    payload.bio ||
+    `${payload.primary_role} available for Beauty Connect staffing.`;
+  const headline =
+    payload.listed_publicly
+      ? `${payload.primary_role} available for booking`
+      : `${payload.primary_role} in onboarding`;
+
+  try {
+    if (payload.selected_skills.length > 0) {
+      const { error: skillsError } = await supabase.from("skills").upsert(
+        payload.selected_skills.map((skill) => ({
+          id: skill.id,
+          name: skill.name,
+          role: skill.role,
+        })),
+        { onConflict: "id" },
+      );
+
+      if (skillsError) {
+        throw skillsError;
+      }
+    }
+
+    const { error: workerError } = await supabase.from("workers").insert({
+      id: workerId,
+      full_name: payload.full_name,
+      id_number: payload.id_number,
+      primary_role: payload.primary_role,
+      profile_photo: payload.profile_photo,
+      location: payload.location,
+      years_of_experience: payload.years_of_experience,
+      bio,
+      availability_status: payload.availability_status,
+      verification_status: verificationStatus,
+      salary_expectation: 0,
+      work_type: "contract",
+      whatsapp_number: payload.whatsapp_number,
+      headline,
+      featured: false,
+      listed_publicly: payload.listed_publicly,
+    });
+
+    if (workerError) {
+      throw workerError;
+    }
+
+    if (payload.selected_skills.length > 0) {
+      const { error: workerSkillsError } = await supabase
+        .from("worker_skills")
+        .insert(
+          payload.selected_skills.map((skill) => ({
+            id: `ws-${workerId}-${skill.id}`,
+            worker_id: workerId,
+            skill_id: skill.id,
+            proficiency_level: "core",
+          })),
+        );
+
+      if (workerSkillsError) {
+        throw workerSkillsError;
+      }
+    }
+
+    if (payload.portfolio_urls.length > 0) {
+      const { error: portfolioError } = await supabase
+        .from("portfolio_images")
+        .insert(
+          payload.portfolio_urls.map((imageUrl, index) => ({
+            id: `pi-${workerId}-${index}`,
+            worker_id: workerId,
+            image_url: imageUrl,
+            caption: `Catalog image ${index + 1}`,
+            is_cover: index === 0,
+          })),
+        );
+
+      if (portfolioError) {
+        throw portfolioError;
+      }
+    }
+
+    const { error: noteError } = await supabase.from("admin_notes").insert({
+      id: `note-${workerId}`,
+      worker_id: workerId,
+      author: adminSession.email,
+      note: payload.listed_publicly
+        ? "Worker published from admin list worker flow."
+        : "Worker added through admin onboarding and kept internal.",
+    });
+
+    if (noteError) {
+      throw noteError;
+    }
+
+    const worker: Worker = {
+      id: workerId,
+      full_name: payload.full_name,
+      id_number: payload.id_number,
+      primary_role: payload.primary_role,
+      profile_photo: payload.profile_photo,
+      location: payload.location,
+      years_of_experience: payload.years_of_experience,
+      bio,
+      availability_status: payload.availability_status,
+      verification_status: verificationStatus,
+      salary_expectation: 0,
+      work_type: "contract",
+      whatsapp_number: payload.whatsapp_number,
+      headline,
+      featured: false,
+      featured_status: "off",
+      featured_expires_at: null,
+      featured_frequency: 0,
+      featured_priority_score: 0,
+      listed_publicly: payload.listed_publicly,
+      skills: payload.selected_skills,
+      portfolio: payload.portfolio_urls.map((imageUrl, index) => ({
+        id: `pi-${workerId}-${index}`,
+        worker_id: workerId,
+        image_url: imageUrl,
+        caption: `Catalog image ${index + 1}`,
+        is_cover: index === 0,
+      })),
+      verification_documents: [],
+      reference_contacts: [],
+      internal_notes: [
+        {
+          id: `note-${workerId}`,
+          worker_id: workerId,
+          team_request_id: null,
+          staffing_assignment_id: null,
+          author: adminSession.email,
+          note: payload.listed_publicly
+            ? "Worker published from admin list worker flow."
+            : "Worker added through admin onboarding and kept internal.",
+          created_at: new Date().toISOString(),
+        },
+      ],
+      active_assignment: null,
+    };
+
+    revalidatePath("/workers");
+    revalidatePath("/admin/workers/list");
+    revalidatePath("/admin/workers/active");
+
+    return NextResponse.json({ worker });
+  } catch (error) {
+    const message =
+      error instanceof Error ? error.message : "Could not save worker.";
+
+    return errorResponse(message, 500);
+  }
+}

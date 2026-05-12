@@ -3,7 +3,6 @@
 import Link from "next/link";
 import { usePathname, useRouter } from "next/navigation";
 import {
-  BadgeCheck,
   BriefcaseBusiness,
   CalendarCheck2,
   Clock3,
@@ -38,14 +37,7 @@ const navGroups = [
   },
   {
     label: "Specialties",
-    items: [
-      { href: "/admin/specialties/roles", label: "Roles", icon: Scissors },
-      {
-        href: "/admin/specialties/sub-specialties",
-        label: "Sub-Specialties",
-        icon: BadgeCheck,
-      },
-    ],
+    items: [{ href: "/admin/specialties", label: "Specialties", icon: Scissors }],
   },
   {
     label: "Bookings",

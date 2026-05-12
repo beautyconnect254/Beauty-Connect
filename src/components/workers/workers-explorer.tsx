@@ -1,11 +1,11 @@
 "use client";
 
 import { useDeferredValue, useState } from "react";
-import { SlidersHorizontal } from "lucide-react";
+import { Search, SlidersHorizontal } from "lucide-react";
 
 import { WorkerCard } from "@/components/workers/worker-card";
 import { Button } from "@/components/ui/button";
-import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
+import { Card, CardContent } from "@/components/ui/card";
 import { Input } from "@/components/ui/input";
 import { Select } from "@/components/ui/select";
 import type { SkillRecord, Worker } from "@/lib/types";
@@ -91,139 +91,139 @@ export function WorkersExplorer({
     });
 
   return (
-    <div className="grid gap-4 lg:grid-cols-[280px_minmax(0,1fr)]">
-      <Card className="h-fit lg:sticky lg:top-20">
-        <CardHeader>
-          <div className="flex items-center gap-3">
-            <div className="rounded-md bg-[color:var(--secondary)] p-2 text-emerald-800">
-              <SlidersHorizontal className="h-4 w-4" />
+    <div className="space-y-3">
+      <Card>
+        <CardContent className="space-y-2.5 p-2.5">
+          <div className="grid gap-2 md:grid-cols-[minmax(220px,1.3fr)_repeat(3,minmax(130px,1fr))]">
+            <div className="relative">
+              <Search className="pointer-events-none absolute left-3 top-2.5 h-4 w-4 text-[color:var(--muted-foreground)]" />
+              <Input
+                value={search}
+                onChange={(event) => setSearch(event.target.value)}
+                placeholder="Search"
+                className="h-9 pl-9"
+              />
             </div>
-            <CardTitle>Filters</CardTitle>
+            <Select
+              value={selectedRole}
+              onChange={(event) => setSelectedRole(event.target.value)}
+              className="h-9"
+            >
+              <option value="all">All roles</option>
+              {Array.from(new Set(workers.map((worker) => worker.primary_role))).map((role) => (
+                <option key={role} value={role}>
+                  {role}
+                </option>
+              ))}
+            </Select>
+            <Select
+              value={selectedSkill}
+              onChange={(event) => setSelectedSkill(event.target.value)}
+              className="h-9"
+            >
+              <option value="all">All skills</option>
+              {skills.map((skill) => (
+                <option key={skill.id} value={skill.id}>
+                  {skill.name}
+                </option>
+              ))}
+            </Select>
+            <Select
+              value={selectedLocation}
+              onChange={(event) => setSelectedLocation(event.target.value)}
+              className="h-9"
+            >
+              <option>All locations</option>
+              {locations.map((location) => (
+                <option key={location} value={location}>
+                  {location}
+                </option>
+              ))}
+            </Select>
           </div>
-        </CardHeader>
-        <CardContent className="space-y-3">
-          <Input
-            value={search}
-            onChange={(event) => setSearch(event.target.value)}
-            placeholder="Search by name, role, skill"
-          />
-          <Select value={selectedRole} onChange={(event) => setSelectedRole(event.target.value)}>
-            <option value="all">All roles</option>
-            {Array.from(new Set(workers.map((worker) => worker.primary_role))).map((role) => (
-              <option key={role} value={role}>
-                {role}
-              </option>
-            ))}
-          </Select>
-          <Select
-            value={selectedSkill}
-            onChange={(event) => setSelectedSkill(event.target.value)}
-          >
-            <option value="all">All skills</option>
-            {skills.map((skill) => (
-              <option key={skill.id} value={skill.id}>
-                {skill.name}
-              </option>
-            ))}
-          </Select>
-          <Select
-            value={selectedLocation}
-            onChange={(event) => setSelectedLocation(event.target.value)}
-          >
-            <option>All locations</option>
-            {locations.map((location) => (
-              <option key={location} value={location}>
-                {location}
-              </option>
-            ))}
-          </Select>
-          <Select value={availability} onChange={(event) => setAvailability(event.target.value)}>
-            <option value="all">Any availability</option>
-            <option value="available">Available</option>
-            <option value="reserved">Reserved</option>
-            <option value="hired">Hired</option>
-          </Select>
-          <Select
-            value={minExperience}
-            onChange={(event) => setMinExperience(event.target.value)}
-          >
-            <option value="0">Any experience</option>
-            <option value="2">2+ years</option>
-            <option value="4">4+ years</option>
-            <option value="6">6+ years</option>
-            <option value="8">8+ years</option>
-          </Select>
-          <Select value={sortBy} onChange={(event) => setSortBy(event.target.value)}>
-            <option value="featured">Featured first</option>
-            <option value="experience">Highest experience</option>
-            <option value="salary-low">Lowest salary</option>
-          </Select>
 
-          <label className="flex items-center justify-between gap-4 rounded-md bg-[color:var(--secondary)] px-3 py-2.5 text-sm font-bold text-[color:var(--foreground)]">
-            Verified workers only
-            <input
-              checked={verifiedOnly}
-              onChange={(event) => setVerifiedOnly(event.target.checked)}
-              type="checkbox"
-              className="h-4 w-4 rounded border-[color:var(--border)] accent-[color:var(--primary)]"
-            />
-          </label>
-
-          <Button
-            variant="secondary"
-            className="w-full"
-            onClick={() => {
-              setSearch("");
-              setSelectedRole("all");
-              setSelectedSkill("all");
-              setSelectedLocation("All locations");
-              setAvailability("all");
-              setMinExperience("0");
-              setSortBy("featured");
-              setVerifiedOnly(true);
-            }}
-          >
-            Clear filters
-          </Button>
+          <div className="flex flex-wrap items-center gap-2">
+            <span className="inline-flex h-8 items-center gap-1.5 rounded-md bg-[color:var(--muted)] px-2.5 text-xs font-extrabold text-[color:var(--foreground)]">
+              <SlidersHorizontal className="h-3.5 w-3.5" />
+              {filteredWorkers.length} match{filteredWorkers.length === 1 ? "" : "es"}
+            </span>
+            <Select
+              value={availability}
+              onChange={(event) => setAvailability(event.target.value)}
+              className="h-8 w-36 text-xs"
+            >
+              <option value="all">Any availability</option>
+              <option value="available">Available</option>
+              <option value="reserved">Reserved</option>
+              <option value="hired">Hired</option>
+            </Select>
+            <Select
+              value={minExperience}
+              onChange={(event) => setMinExperience(event.target.value)}
+              className="h-8 w-32 text-xs"
+            >
+              <option value="0">Any exp.</option>
+              <option value="2">2+ years</option>
+              <option value="4">4+ years</option>
+              <option value="6">6+ years</option>
+              <option value="8">8+ years</option>
+            </Select>
+            <Select
+              value={sortBy}
+              onChange={(event) => setSortBy(event.target.value)}
+              className="h-8 w-40 text-xs"
+            >
+              <option value="featured">Featured first</option>
+              <option value="experience">Highest exp.</option>
+              <option value="salary-low">Lowest salary</option>
+            </Select>
+            <label className="inline-flex h-8 items-center gap-2 rounded-md border border-[color:var(--border)] bg-white px-2.5 text-xs font-extrabold text-[color:var(--foreground)]">
+              Verified
+              <input
+                checked={verifiedOnly}
+                onChange={(event) => setVerifiedOnly(event.target.checked)}
+                type="checkbox"
+                className="h-3.5 w-3.5 rounded border-[color:var(--border)] accent-[color:var(--primary)]"
+              />
+            </label>
+            <Button
+              variant="secondary"
+              size="sm"
+              onClick={() => {
+                setSearch("");
+                setSelectedRole("all");
+                setSelectedSkill("all");
+                setSelectedLocation("All locations");
+                setAvailability("all");
+                setMinExperience("0");
+                setSortBy("featured");
+                setVerifiedOnly(true);
+              }}
+            >
+              Clear
+            </Button>
+          </div>
         </CardContent>
       </Card>
 
-      <div className="space-y-3">
+      {filteredWorkers.length > 0 ? (
+        <div className="grid grid-cols-2 gap-2.5 sm:grid-cols-2 xl:grid-cols-3">
+          {filteredWorkers.map((worker) => (
+            <WorkerCard key={worker.id} worker={worker} compact />
+          ))}
+        </div>
+      ) : (
         <Card>
-          <CardContent className="flex flex-col gap-2 p-3 sm:flex-row sm:items-center sm:justify-between">
-            <div>
-              <p className="text-[11px] font-bold uppercase text-[color:var(--muted-foreground)]">
-                Results
-              </p>
-              <p className="mt-1 text-lg font-extrabold text-[color:var(--foreground)]">
-                {filteredWorkers.length} worker{filteredWorkers.length === 1 ? "" : "s"} matched
-              </p>
-            </div>
-            <p className="max-w-xl text-xs leading-5 text-[color:var(--muted-foreground)]">
-              Use filters to find workers who fit the job.
+          <CardContent className="p-4 text-center">
+            <p className="text-lg font-extrabold text-[color:var(--foreground)]">
+              No workers match those filters yet
+            </p>
+            <p className="mt-2 text-sm leading-5 text-[color:var(--muted-foreground)]">
+              Try widening location or availability to see more verified workers.
             </p>
           </CardContent>
         </Card>
-
-        {filteredWorkers.length > 0 ? (
-          <div className="grid grid-cols-2 gap-2.5 sm:grid-cols-2 xl:grid-cols-3">
-            {filteredWorkers.map((worker) => (
-              <WorkerCard key={worker.id} worker={worker} compact />
-            ))}
-          </div>
-        ) : (
-          <Card>
-            <CardContent className="p-4 text-center">
-              <p className="text-lg font-extrabold text-[color:var(--foreground)]">
-                No workers match those filters yet
-              </p>
-              <p className="mt-2 text-sm leading-5 text-[color:var(--muted-foreground)]">
-                Try widening location or availability to see more verified workers.
-              </p>
-            </CardContent>
-          </Card>
-        )}
-      </div>
+      )}
     </div>
   );
 }

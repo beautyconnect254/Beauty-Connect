@@ -34,24 +34,28 @@ interface WorkerDraft {
   id_number: string;
   profile_photo: string;
   portfolio_urls: string;
-  years_of_experience: string;
+  experience_years: string;
+  experience_months: string;
   bio: string;
   primary_role: WorkerRole;
+  location: string;
   selected_skill_ids: string[];
   availability_status: Worker["availability_status"];
   listed_publicly: boolean;
 }
 
-function createBlankDraft(defaultRole: WorkerRole): WorkerDraft {
+function createBlankDraft(defaultRole: WorkerRole, defaultLocation = "Nairobi"): WorkerDraft {
   return {
     full_name: "",
     whatsapp_number: "",
     id_number: "",
     profile_photo: "",
     portfolio_urls: "",
-    years_of_experience: "3",
+    experience_years: "3",
+    experience_months: "0",
     bio: "",
     primary_role: defaultRole,
+    location: defaultLocation,
     selected_skill_ids: [],
     availability_status: "available",
     listed_publicly: true,
@@ -65,7 +69,7 @@ function draftScore(draft: WorkerDraft) {
     draft.id_number,
     draft.profile_photo,
     draft.portfolio_urls,
-    draft.years_of_experience,
+    draft.experience_years || draft.experience_months,
     draft.primary_role,
     draft.selected_skill_ids.length > 0,
   ];
@@ -79,12 +83,14 @@ export function AdminWorkerOnboardingClient({
   locations,
 }: AdminWorkerOnboardingClientProps) {
   const defaultRole = roleCatalog[0]?.role ?? "Barber";
+  const defaultLocation = locations[0] ?? "Nairobi";
   const [workers, setWorkers] = useState(initialWorkers);
-  const [draft, setDraft] = useState(createBlankDraft(defaultRole));
+  const [draft, setDraft] = useState(createBlankDraft(defaultRole, defaultLocation));
   const [notice, setNotice] = useState("");
   const [uploadError, setUploadError] = useState("");
   const [uploadingProfile, setUploadingProfile] = useState(false);
   const [uploadingCatalog, setUploadingCatalog] = useState(false);
+  const [savingWorker, setSavingWorker] = useState(false);
   const roles = useMemo(() => roleCatalog.map((role) => role.role), [roleCatalog]);
   const skillsForRole = useMemo(
     () =>
@@ -97,6 +103,7 @@ export function AdminWorkerOnboardingClient({
     .map((item) => item.trim())
     .filter(Boolean);
   const isUploading = uploadingProfile || uploadingCatalog;
+  const isBusy = isUploading || savingWorker;
 
   function toggleSkill(skillId: string) {
     setDraft((current) => ({
@@ -240,66 +247,74 @@ export function AdminWorkerOnboardingClient({
     }
   }
 
-  function saveWorker() {
+  function totalExperienceYears() {
+    const years = Math.max(Number(draft.experience_years) || 0, 0);
+    const months = Math.min(Math.max(Number(draft.experience_months) || 0, 0), 11);
+
+    return Math.max(years + (months >= 6 ? 1 : 0), months > 0 ? 1 : 0);
+  }
+
+  async function saveWorker() {
     if (!draft.full_name.trim()) {
       setNotice("Worker name is required before saving.");
       return;
     }
 
-    const id = `${draft.full_name.toLowerCase().replace(/[^a-z0-9]+/g, "-")}-${workers.length + 1}`;
+    if (draft.listed_publicly && !draft.profile_photo.trim()) {
+      setNotice("Add a profile photo before publishing this worker to /workers.");
+      return;
+    }
+
     const allPortfolioImages = portfolioUrls;
     const selectedSkills = skillsForRole.filter((skill) =>
       draft.selected_skill_ids.includes(skill.id),
     );
-    const nextWorker: Worker = {
-      id,
-      full_name: draft.full_name.trim(),
-      id_number: draft.id_number.trim(),
-      primary_role: draft.primary_role,
-      profile_photo: draft.profile_photo,
-      location: locations[0] ?? "Nairobi",
-      years_of_experience: Number(draft.years_of_experience) || 0,
-      bio: draft.bio.trim(),
-      availability_status: draft.availability_status,
-      verification_status: "pending",
-      salary_expectation: 0,
-      work_type: "contract",
-      whatsapp_number: draft.whatsapp_number.trim(),
-      headline: `${draft.primary_role} in onboarding`,
-      featured: false,
-      featured_status: "off",
-      featured_expires_at: null,
-      featured_frequency: 0,
-      featured_priority_score: 0,
-      listed_publicly: draft.listed_publicly,
-      skills: selectedSkills,
-      portfolio: allPortfolioImages.map((imageUrl, index) => ({
-        id: `${id}-portfolio-${index}`,
-        worker_id: id,
-        image_url: imageUrl,
-        caption: `Catalog image ${index + 1}`,
-        is_cover: index === 0,
-      })),
-      verification_documents: [],
-      reference_contacts: [],
-      internal_notes: [
-        {
-          id: `${id}-note-onboarding`,
-          worker_id: id,
-          team_request_id: null,
-          staffing_assignment_id: null,
-          author: "Admin",
-          note: "Worker listed through admin onboarding. Verify ID, references, and current availability before matching.",
-          created_at: new Date().toISOString(),
-        },
-      ],
-      active_assignment: null,
-    };
 
-    setWorkers((current) => [nextWorker, ...current]);
-    setDraft(createBlankDraft(defaultRole));
+    setSavingWorker(true);
     setUploadError("");
-    setNotice(`${nextWorker.full_name} was added to the internal onboarding roster.`);
+
+    try {
+      const response = await fetch("/api/admin/workers", {
+        method: "POST",
+        headers: {
+          "Content-Type": "application/json",
+        },
+        body: JSON.stringify({
+          full_name: draft.full_name,
+          whatsapp_number: draft.whatsapp_number,
+          id_number: draft.id_number,
+          profile_photo: draft.profile_photo,
+          portfolio_urls: allPortfolioImages,
+          years_of_experience: totalExperienceYears(),
+          bio: draft.bio,
+          primary_role: draft.primary_role,
+          location: draft.location,
+          selected_skills: selectedSkills,
+          availability_status: draft.availability_status,
+          listed_publicly: draft.listed_publicly,
+        }),
+      });
+      const body = (await response.json().catch(() => null)) as {
+        error?: string;
+        worker?: Worker;
+      } | null;
+
+      if (!response.ok || !body?.worker) {
+        throw new Error(body?.error ?? "Could not save worker.");
+      }
+
+      setWorkers((current) => [body.worker as Worker, ...current]);
+      setDraft(createBlankDraft(defaultRole, defaultLocation));
+      setNotice(
+        body.worker.listed_publicly
+          ? `${body.worker.full_name} is now published on /workers.`
+          : `${body.worker.full_name} was added to the internal onboarding roster.`,
+      );
+    } catch (error) {
+      setNotice(error instanceof Error ? error.message : "Could not save worker.");
+    } finally {
+      setSavingWorker(false);
+    }
   }
 
   return (
@@ -372,17 +387,35 @@ export function AdminWorkerOnboardingClient({
               <label className="text-xs font-extrabold text-[color:var(--foreground)]">
                 Work Experience
               </label>
-              <Input
-                type="number"
-                min="0"
-                value={draft.years_of_experience}
-                onChange={(event) =>
-                  setDraft((current) => ({
-                    ...current,
-                    years_of_experience: event.target.value,
-                  }))
-                }
-              />
+              <div className="grid grid-cols-2 gap-2">
+                <Input
+                  type="number"
+                  min="0"
+                  value={draft.experience_years}
+                  onChange={(event) =>
+                    setDraft((current) => ({
+                      ...current,
+                      experience_years: event.target.value,
+                    }))
+                  }
+                  aria-label="Years of experience"
+                  placeholder="Years"
+                />
+                <Input
+                  type="number"
+                  min="0"
+                  max="11"
+                  value={draft.experience_months}
+                  onChange={(event) =>
+                    setDraft((current) => ({
+                      ...current,
+                      experience_months: event.target.value,
+                    }))
+                  }
+                  aria-label="Months of experience"
+                  placeholder="Months"
+                />
+              </div>
             </div>
             <div className="space-y-1.5">
               <label className="text-xs font-extrabold text-[color:var(--foreground)]">
@@ -401,6 +434,23 @@ export function AdminWorkerOnboardingClient({
                 {roles.map((role) => (
                   <option key={role} value={role}>
                     {role}
+                  </option>
+                ))}
+              </Select>
+            </div>
+            <div className="space-y-1.5">
+              <label className="text-xs font-extrabold text-[color:var(--foreground)]">
+                Location
+              </label>
+              <Select
+                value={draft.location}
+                onChange={(event) =>
+                  setDraft((current) => ({ ...current, location: event.target.value }))
+                }
+              >
+                {Array.from(new Set([...locations, "Nairobi"])).map((location) => (
+                  <option key={location} value={location}>
+                    {location}
                   </option>
                 ))}
               </Select>
@@ -581,7 +631,7 @@ export function AdminWorkerOnboardingClient({
               </div>
 
               <label className="flex items-center justify-between gap-3 rounded-md border border-[color:var(--border)] bg-white px-3 py-2 text-sm font-extrabold text-[color:var(--foreground)]">
-                Active Listing Toggle
+                Publish on /workers
                 <input
                   type="checkbox"
                   checked={draft.listed_publicly}
@@ -600,11 +650,15 @@ export function AdminWorkerOnboardingClient({
           <div className="flex flex-col gap-3 border-t border-[color:var(--border)] pt-4 sm:flex-row sm:items-center sm:justify-between">
             <div className="flex items-center gap-2 text-sm font-semibold text-[color:var(--muted-foreground)]">
               <ListChecks className="h-4 w-4" />
-              Reserved and hired workers are blocked from matching automatically.
+              Published workers are verified and visible to salon owners.
             </div>
-            <Button disabled={isUploading} onClick={saveWorker}>
-              <Save className="h-4 w-4" />
-              {isUploading ? "Uploading..." : "Save worker"}
+            <Button disabled={isBusy} onClick={() => void saveWorker()}>
+              {savingWorker ? (
+                <Loader2 className="h-4 w-4 animate-spin" />
+              ) : (
+                <Save className="h-4 w-4" />
+              )}
+              {isBusy ? "Saving..." : "Save worker"}
             </Button>
           </div>
         </CardContent>
@@ -639,8 +693,16 @@ export function AdminWorkerOnboardingClient({
                   {worker.primary_role} - {availabilityLabel(worker.availability_status)}
                 </p>
               </div>
-              <Badge variant={worker.listed_publicly ? "verified" : "outline"}>
-                {worker.listed_publicly ? "Active" : "Off"}
+              <Badge
+                variant={
+                  worker.listed_publicly && worker.verification_status === "verified"
+                    ? "verified"
+                    : "outline"
+                }
+              >
+                {worker.listed_publicly && worker.verification_status === "verified"
+                  ? "Public"
+                  : "Internal"}
               </Badge>
             </div>
           ))}

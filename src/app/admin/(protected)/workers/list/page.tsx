@@ -1,12 +1,21 @@
 import { AdminWorkerOnboardingClient } from "@/components/admin/admin-worker-onboarding-client";
 import { PageIntro } from "@/components/shared/page-intro";
 import {
-  getLocations,
-  getRoleSpecialtyCatalog,
-  getWorkers,
+  getRoleSpecialtyCatalogAsync,
+  getWorkersAsync,
 } from "@/lib/data-access";
 
-export default function AdminListWorkerPage() {
+export const dynamic = "force-dynamic";
+
+export default async function AdminListWorkerPage() {
+  const [workers, roleCatalog] = await Promise.all([
+    getWorkersAsync(),
+    getRoleSpecialtyCatalogAsync(),
+  ]);
+  const locations = Array.from(
+    new Set(workers.map((worker) => worker.location)),
+  ).sort();
+
   return (
     <div className="space-y-4">
       <PageIntro
@@ -15,9 +24,9 @@ export default function AdminListWorkerPage() {
         description="Create a staffing-ready worker record with role, sub-specialties, evidence, status, and listing controls."
       />
       <AdminWorkerOnboardingClient
-        initialWorkers={getWorkers()}
-        roleCatalog={getRoleSpecialtyCatalog()}
-        locations={getLocations()}
+        initialWorkers={workers}
+        roleCatalog={roleCatalog}
+        locations={locations}
       />
     </div>
   );

@@ -19,10 +19,16 @@ import {
   workers,
   workerSkills,
 } from "@/lib/mock-data";
+import {
+  createSupabaseServerClient,
+  createSupabaseServiceClient,
+} from "@/lib/supabase/server";
 import type {
+  AvailabilityStatus,
   Booking,
   BookingRecord,
   DashboardMetric,
+  FeaturedStatus,
   Hire,
   RoleSpecialtyCatalog,
   SkillRecord,
@@ -31,10 +37,348 @@ import type {
   TeamRequest,
   TeamRequestRole,
   TeamRequestRoleRecommendation,
+  VerificationDocumentStatus,
+  VerificationStatus,
   Worker,
   WorkerRole,
+  WorkType,
 } from "@/lib/types";
 import { totalHeadcount } from "@/lib/utils";
+
+const availabilityStatuses: AvailabilityStatus[] = [
+  "available",
+  "reserved",
+  "hired",
+];
+const verificationStatuses: VerificationStatus[] = [
+  "pending",
+  "verified",
+  "rejected",
+];
+const workTypes: WorkType[] = ["full-time", "part-time", "contract", "freelance"];
+const documentStatuses: VerificationDocumentStatus[] = [
+  "pending",
+  "verified",
+  "rejected",
+];
+
+function getReadableSupabaseClient() {
+  return createSupabaseServiceClient() ?? createSupabaseServerClient();
+}
+
+function pickEnumValue<T extends string>(
+  value: unknown,
+  options: readonly T[],
+  fallback: T,
+) {
+  return typeof value === "string" && options.includes(value as T)
+    ? (value as T)
+    : fallback;
+}
+
+function mergeById<T extends { id: string }>(primary: T[], fallback: T[]) {
+  const seen = new Set<string>();
+  const merged: T[] = [];
+
+  for (const item of [...primary, ...fallback]) {
+    if (!seen.has(item.id)) {
+      seen.add(item.id);
+      merged.push(item);
+    }
+  }
+
+  return merged;
+}
+
+function mergeByName<T extends { name: string }>(primary: T[], fallback: T[]) {
+  const seen = new Set<string>();
+  const merged: T[] = [];
+
+  for (const item of [...primary, ...fallback]) {
+    const key = item.name.toLowerCase();
+
+    if (!seen.has(key)) {
+      seen.add(key);
+      merged.push(item);
+    }
+  }
+
+  return merged;
+}
+
+type SupabaseWorkerRow = {
+  id: string;
+  full_name: string;
+  id_number?: string | null;
+  primary_role: string;
+  profile_photo: string | null;
+  location: string | null;
+  years_of_experience: number | null;
+  bio: string | null;
+  availability_status: string | null;
+  verification_status: string | null;
+  salary_expectation: number | null;
+  work_type: string | null;
+  whatsapp_number: string | null;
+  headline: string | null;
+  featured: boolean | null;
+  listed_publicly: boolean | null;
+};
+
+async function getSkillsFromSupabase(): Promise<SkillRecord[]> {
+  const supabase = getReadableSupabaseClient();
+
+  if (!supabase) {
+    return [];
+  }
+
+  const { data, error } = await supabase
+    .from("skills")
+    .select("id, name, role")
+    .order("role", { ascending: true })
+    .order("name", { ascending: true });
+
+  if (error || !data) {
+    return [];
+  }
+
+  return data
+    .filter((skill) => skill.id && skill.name && skill.role)
+    .map((skill) => ({
+      id: skill.id,
+      name: skill.name,
+      role: skill.role,
+    }));
+}
+
+async function getWorkerRolesFromSupabase(): Promise<RoleSpecialtyCatalog[]> {
+  const supabase = getReadableSupabaseClient();
+
+  if (!supabase) {
+    return [];
+  }
+
+  const [{ data: roleRows, error: roleError }, dbSkills] = await Promise.all([
+    supabase
+      .from("worker_roles")
+      .select("id, name, description, typical_team_use")
+      .order("name", { ascending: true }),
+    getSkillsFromSupabase(),
+  ]);
+
+  if (roleError || !roleRows) {
+    return [];
+  }
+
+  return roleRows
+    .filter((role) => role.name)
+    .map((role) => ({
+      role: role.name,
+      description: role.description ?? "",
+      typical_team_use: role.typical_team_use ?? "",
+      specialties: dbSkills.filter((skill) => skill.role === role.name),
+    }));
+}
+
+async function getWorkersFromSupabase(): Promise<Worker[]> {
+  const supabase = getReadableSupabaseClient();
+
+  if (!supabase) {
+    return [];
+  }
+
+  const { data: workerRows, error: workerError } = await supabase
+    .from("workers")
+    .select(
+      [
+        "id",
+        "full_name",
+        "id_number",
+        "primary_role",
+        "profile_photo",
+        "location",
+        "years_of_experience",
+        "bio",
+        "availability_status",
+        "verification_status",
+        "salary_expectation",
+        "work_type",
+        "whatsapp_number",
+        "headline",
+        "featured",
+        "listed_publicly",
+      ].join(", "),
+    )
+    .order("updated_at", { ascending: false });
+
+  if (workerError || !workerRows || workerRows.length === 0) {
+    return [];
+  }
+
+  const dbWorkerRows = workerRows as unknown as SupabaseWorkerRow[];
+  const workerIds = dbWorkerRows.map((worker) => worker.id);
+  const [
+    dbSkills,
+    workerSkillsResult,
+    portfolioResult,
+    documentsResult,
+    referencesResult,
+    notesResult,
+    assignmentsResult,
+  ] = await Promise.all([
+    getSkillsFromSupabase(),
+    supabase
+      .from("worker_skills")
+      .select("id, worker_id, skill_id, proficiency_level")
+      .in("worker_id", workerIds),
+    supabase
+      .from("portfolio_images")
+      .select("id, worker_id, image_url, caption, is_cover")
+      .in("worker_id", workerIds),
+    supabase
+      .from("verification_documents")
+      .select("id, worker_id, document_type, status, file_url, uploaded_at")
+      .in("worker_id", workerIds),
+    supabase
+      .from("worker_references")
+      .select("id, worker_id, contact_name, contact_phone, relationship, previous_workplace")
+      .in("worker_id", workerIds),
+    supabase
+      .from("admin_notes")
+      .select("id, worker_id, team_request_id, staffing_assignment_id, author, note, created_at")
+      .in("worker_id", workerIds),
+    supabase
+      .from("staffing_assignments")
+      .select("id, team_request_id, team_request_role_id, worker_id, status, assigned_by, assigned_at, notes")
+      .in("worker_id", workerIds),
+  ]);
+
+  const assignmentRows = assignmentsResult.data ?? [];
+  const requestIds = Array.from(
+    new Set(assignmentRows.map((assignment) => assignment.team_request_id)),
+  ).filter(Boolean);
+  const { data: requestRows } =
+    requestIds.length > 0
+      ? await supabase
+          .from("team_requests")
+          .select("id, salon_name")
+          .in("id", requestIds)
+      : { data: [] };
+  const requestsById = new Map(
+    (requestRows ?? []).map((request) => [request.id, request.salon_name]),
+  );
+  const activeAssignmentsByWorker = new Map<
+    string,
+    NonNullable<Worker["active_assignment"]>
+  >();
+
+  assignmentRows
+    .filter(
+      (assignment) =>
+        assignment.status === "reserved" || assignment.status === "hired",
+    )
+    .sort(
+      (left, right) =>
+        new Date(right.assigned_at).getTime() -
+        new Date(left.assigned_at).getTime(),
+    )
+    .forEach((assignment) => {
+      if (activeAssignmentsByWorker.has(assignment.worker_id)) {
+        return;
+      }
+
+      activeAssignmentsByWorker.set(assignment.worker_id, {
+        team_request_id: assignment.team_request_id,
+        salon_name:
+          requestsById.get(assignment.team_request_id) ?? "Assigned salon",
+        status: assignment.status,
+        assigned_at: assignment.assigned_at,
+      });
+    });
+
+  const skillsById = new Map(dbSkills.map((skill) => [skill.id, skill]));
+
+  return dbWorkerRows.map((worker) => {
+    const featured = Boolean(worker.featured);
+    const featuredStatus: FeaturedStatus = featured ? "active" : "off";
+
+    return {
+      id: worker.id,
+      full_name: worker.full_name,
+      id_number: worker.id_number ?? "",
+      primary_role: worker.primary_role,
+      profile_photo: worker.profile_photo ?? "",
+      location: worker.location ?? "Nairobi",
+      years_of_experience: Math.max(Number(worker.years_of_experience) || 0, 0),
+      bio: worker.bio ?? "",
+      availability_status: pickEnumValue(
+        worker.availability_status,
+        availabilityStatuses,
+        "available",
+      ),
+      verification_status: pickEnumValue(
+        worker.verification_status,
+        verificationStatuses,
+        "pending",
+      ),
+      salary_expectation: Math.max(Number(worker.salary_expectation) || 0, 0),
+      work_type: pickEnumValue(worker.work_type, workTypes, "contract"),
+      whatsapp_number: worker.whatsapp_number ?? "",
+      headline: worker.headline ?? "",
+      featured,
+      featured_status: featuredStatus,
+      featured_expires_at: null,
+      featured_frequency: 0,
+      featured_priority_score: featured ? 1 : 0,
+      listed_publicly: Boolean(worker.listed_publicly),
+      skills: (workerSkillsResult.data ?? [])
+        .filter((item) => item.worker_id === worker.id)
+        .map((item) => skillsById.get(item.skill_id))
+        .filter((item): item is SkillRecord => Boolean(item)),
+      portfolio: (portfolioResult.data ?? [])
+        .filter((item) => item.worker_id === worker.id)
+        .map((item) => ({
+          id: item.id,
+          worker_id: item.worker_id,
+          image_url: item.image_url,
+          caption: item.caption ?? "",
+          is_cover: Boolean(item.is_cover),
+        })),
+      verification_documents: (documentsResult.data ?? [])
+        .filter((item) => item.worker_id === worker.id)
+        .map((item) => ({
+          id: item.id,
+          worker_id: item.worker_id,
+          document_type: item.document_type,
+          status: pickEnumValue(item.status, documentStatuses, "pending"),
+          file_url: item.file_url ?? "",
+          uploaded_at: item.uploaded_at,
+        })),
+      reference_contacts: (referencesResult.data ?? [])
+        .filter((item) => item.worker_id === worker.id)
+        .map((item) => ({
+          id: item.id,
+          worker_id: item.worker_id,
+          contact_name: item.contact_name,
+          contact_phone: item.contact_phone,
+          relationship: item.relationship ?? "",
+          previous_workplace: item.previous_workplace ?? "",
+        })),
+      internal_notes: (notesResult.data ?? [])
+        .filter((item) => item.worker_id === worker.id)
+        .map((item) => ({
+          id: item.id,
+          worker_id: item.worker_id,
+          team_request_id: item.team_request_id,
+          staffing_assignment_id: item.staffing_assignment_id,
+          author: item.author,
+          note: item.note,
+          created_at: item.created_at,
+        })),
+      active_assignment: activeAssignmentsByWorker.get(worker.id) ?? null,
+    };
+  });
+}
 
 function getRoleSkills(roleRequestId: string) {
   return teamRequestRoleSkills
@@ -245,8 +589,18 @@ export function getWorkers() {
     });
 }
 
+export async function getWorkersAsync() {
+  return mergeById(await getWorkersFromSupabase(), getWorkers());
+}
+
 export function getPublicWorkers() {
   return getWorkers().filter(
+    (worker) => worker.verification_status === "verified" && worker.listed_publicly,
+  );
+}
+
+export async function getPublicWorkersAsync() {
+  return (await getWorkersAsync()).filter(
     (worker) => worker.verification_status === "verified" && worker.listed_publicly,
   );
 }
@@ -280,8 +634,24 @@ export function getWorkerById(id: string) {
   return hydrateWorker(id);
 }
 
+export async function getWorkerByIdAsync(id: string) {
+  return (await getWorkersAsync()).find((worker) => worker.id === id);
+}
+
 export function getPublicWorkerById(id: string) {
   const worker = hydrateWorker(id);
+
+  if (!worker) {
+    return undefined;
+  }
+
+  return worker.verification_status === "verified" && worker.listed_publicly
+    ? worker
+    : undefined;
+}
+
+export async function getPublicWorkerByIdAsync(id: string) {
+  const worker = await getWorkerByIdAsync(id);
 
   if (!worker) {
     return undefined;
@@ -423,6 +793,10 @@ export function getSkills() {
   return skills;
 }
 
+export async function getSkillsAsync() {
+  return mergeById(await getSkillsFromSupabase(), skills);
+}
+
 export function getRoleSpecialtyCatalog(): RoleSpecialtyCatalog[] {
   return workerCategories.map((category) => ({
     ...category,
@@ -430,8 +804,41 @@ export function getRoleSpecialtyCatalog(): RoleSpecialtyCatalog[] {
   }));
 }
 
+export async function getRoleSpecialtyCatalogAsync(): Promise<RoleSpecialtyCatalog[]> {
+  const [dbCatalog, allSkills] = await Promise.all([
+    getWorkerRolesFromSupabase(),
+    getSkillsAsync(),
+  ]);
+  const fallbackCatalog = getRoleSpecialtyCatalog();
+  const mergedRoles = mergeByName(
+    dbCatalog.map((item) => ({
+      name: item.role,
+      description: item.description,
+      typical_team_use: item.typical_team_use,
+    })),
+    fallbackCatalog.map((item) => ({
+      name: item.role,
+      description: item.description,
+      typical_team_use: item.typical_team_use,
+    })),
+  );
+
+  return mergedRoles.map((role) => ({
+    role: role.name,
+    description: role.description,
+    typical_team_use: role.typical_team_use,
+    specialties: allSkills.filter((skill) => skill.role === role.name),
+  }));
+}
+
 export function getLocations() {
   return Array.from(new Set(workers.map((worker) => worker.location))).sort();
+}
+
+export async function getLocationsAsync() {
+  return Array.from(
+    new Set((await getWorkersAsync()).map((worker) => worker.location)),
+  ).sort();
 }
 
 export function getSkillsForRole(role: WorkerRole) {

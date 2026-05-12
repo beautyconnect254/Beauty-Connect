@@ -9,22 +9,27 @@ import { Badge } from "@/components/ui/badge";
 import { buttonVariants } from "@/components/ui/button";
 import { Card, CardContent } from "@/components/ui/card";
 import { WorkerBookingModal } from "@/components/workers/worker-booking-modal";
-import { getPublicWorkerById, getPublicWorkers } from "@/lib/data-access";
+import {
+  getPublicWorkerByIdAsync,
+  getPublicWorkersAsync,
+} from "@/lib/data-access";
 import { availabilityLabel, cn, verificationLabel } from "@/lib/utils";
 
 interface WorkerProfilePageProps {
   params: Promise<{ id: string }>;
 }
 
+export const dynamic = "force-dynamic";
+
 export async function generateStaticParams() {
-  return getPublicWorkers().map((worker) => ({ id: worker.id }));
+  return (await getPublicWorkersAsync()).map((worker) => ({ id: worker.id }));
 }
 
 export async function generateMetadata({
   params,
 }: WorkerProfilePageProps): Promise<Metadata> {
   const { id } = await params;
-  const worker = getPublicWorkerById(id);
+  const worker = await getPublicWorkerByIdAsync(id);
 
   if (!worker) {
     return { title: "Worker not found" };
@@ -40,7 +45,7 @@ export default async function WorkerProfilePage({
   params,
 }: WorkerProfilePageProps) {
   const { id } = await params;
-  const worker = getPublicWorkerById(id);
+  const worker = await getPublicWorkerByIdAsync(id);
 
   if (!worker) {
     notFound();
