@@ -17,6 +17,13 @@ import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Input } from "@/components/ui/input";
 import { Select } from "@/components/ui/select";
 import { Textarea } from "@/components/ui/textarea";
+import { activeBookingCountLabel } from "@/lib/capacity-rules";
+import {
+  experienceYearsFromMonths,
+  formatExperienceMonths,
+  normalizeExperienceMonths,
+  type ExperienceUnit,
+} from "@/lib/experience";
 import { compressImageFile } from "@/lib/image-compression";
 import type { RoleSpecialtyCatalog, Worker, WorkerRole } from "@/lib/types";
 import { availabilityLabel, cn } from "@/lib/utils";
@@ -34,8 +41,8 @@ interface WorkerDraft {
   id_number: string;
   profile_photo: string;
   portfolio_urls: string;
-  experience_years: string;
-  experience_months: string;
+  experience_value: string;
+  experience_unit: ExperienceUnit;
   bio: string;
   primary_role: WorkerRole;
   location: string;
@@ -51,8 +58,8 @@ function createBlankDraft(defaultRole: WorkerRole, defaultLocation = "Nairobi"):
     id_number: "",
     profile_photo: "",
     portfolio_urls: "",
-    experience_years: "3",
-    experience_months: "0",
+    experience_value: "3",
+    experience_unit: "years",
     bio: "",
     primary_role: defaultRole,
     location: defaultLocation,
@@ -69,7 +76,7 @@ function draftScore(draft: WorkerDraft) {
     draft.id_number,
     draft.profile_photo,
     draft.portfolio_urls,
-    draft.experience_years || draft.experience_months,
+    draft.experience_value,
     draft.primary_role,
     draft.selected_skill_ids.length > 0,
   ];
@@ -247,11 +254,8 @@ export function AdminWorkerOnboardingClient({
     }
   }
 
-  function totalExperienceYears() {
-    const years = Math.max(Number(draft.experience_years) || 0, 0);
-    const months = Math.min(Math.max(Number(draft.experience_months) || 0, 0), 11);
-
-    return Math.max(years + (months >= 6 ? 1 : 0), months > 0 ? 1 : 0);
+  function totalExperienceMonths() {
+    return normalizeExperienceMonths(draft.experience_value, draft.experience_unit);
   }
 
   async function saveWorker() {
@@ -285,7 +289,10 @@ export function AdminWorkerOnboardingClient({
           id_number: draft.id_number,
           profile_photo: draft.profile_photo,
           portfolio_urls: allPortfolioImages,
-          years_of_experience: totalExperienceYears(),
+          years_of_experience: experienceYearsFromMonths(totalExperienceMonths()),
+          experience_months: totalExperienceMonths(),
+          experience_value: draft.experience_value,
+          experience_unit: draft.experience_unit,
           bio: draft.bio,
           primary_role: draft.primary_role,
           location: draft.location,
@@ -385,37 +392,39 @@ export function AdminWorkerOnboardingClient({
             </div>
             <div className="space-y-1.5">
               <label className="text-xs font-extrabold text-[color:var(--foreground)]">
-                Work Experience
+                Experience
               </label>
-              <div className="grid grid-cols-2 gap-2">
+              <div className="grid grid-cols-[minmax(0,1fr)_140px] gap-2">
                 <Input
                   type="number"
                   min="0"
-                  value={draft.experience_years}
+                  value={draft.experience_value}
                   onChange={(event) =>
                     setDraft((current) => ({
                       ...current,
-                      experience_years: event.target.value,
+                      experience_value: event.target.value,
                     }))
                   }
-                  aria-label="Years of experience"
-                  placeholder="Years"
+                  aria-label="Experience value"
+                  placeholder="6"
                 />
-                <Input
-                  type="number"
-                  min="0"
-                  max="11"
-                  value={draft.experience_months}
+                <Select
+                  value={draft.experience_unit}
                   onChange={(event) =>
                     setDraft((current) => ({
                       ...current,
-                      experience_months: event.target.value,
+                      experience_unit: event.target.value as ExperienceUnit,
                     }))
                   }
-                  aria-label="Months of experience"
-                  placeholder="Months"
-                />
+                  aria-label="Experience unit"
+                >
+                  <option value="months">Months</option>
+                  <option value="years">Years</option>
+                </Select>
               </div>
+              <p className="text-[11px] font-bold text-[color:var(--muted-foreground)]">
+                {formatExperienceMonths(totalExperienceMonths())}
+              </p>
             </div>
             <div className="space-y-1.5">
               <label className="text-xs font-extrabold text-[color:var(--foreground)]">
@@ -691,6 +700,9 @@ export function AdminWorkerOnboardingClient({
                 </p>
                 <p className="truncate text-xs text-[color:var(--muted-foreground)]">
                   {worker.primary_role} - {availabilityLabel(worker.availability_status)}
+                </p>
+                <p className="truncate text-[11px] font-bold text-[color:var(--muted-foreground)]">
+                  {activeBookingCountLabel(worker.active_booking_count)}
                 </p>
               </div>
               <Badge

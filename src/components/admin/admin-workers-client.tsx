@@ -21,6 +21,15 @@ import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Input } from "@/components/ui/input";
 import { Select } from "@/components/ui/select";
 import { Textarea } from "@/components/ui/textarea";
+import { activeBookingCountLabel } from "@/lib/capacity-rules";
+import {
+  experienceInputFromMonths,
+  experienceYearsFromMonths,
+  formatExperienceMonths,
+  normalizeExperienceMonths,
+  workerExperienceMonths,
+  type ExperienceUnit,
+} from "@/lib/experience";
 import type {
   SkillRecord,
   RoleSpecialtyCatalog,
@@ -50,7 +59,8 @@ interface WorkerDraft {
   primary_role: WorkerRole;
   profile_photo: string;
   location: string;
-  years_of_experience: string;
+  experience_value: string;
+  experience_unit: ExperienceUnit;
   bio: string;
   availability_status: Worker["availability_status"];
   verification_status: Worker["verification_status"];
@@ -83,6 +93,9 @@ const steps = [
 
 function createDraft(worker?: Worker, defaultRole: WorkerRole = "Hair Stylist"): WorkerDraft {
   const primaryReference = worker?.reference_contacts[0];
+  const experienceInput = experienceInputFromMonths(
+    worker ? workerExperienceMonths(worker) : 24,
+  );
 
   return {
     id: worker?.id,
@@ -90,7 +103,8 @@ function createDraft(worker?: Worker, defaultRole: WorkerRole = "Hair Stylist"):
     primary_role: worker?.primary_role ?? defaultRole,
     profile_photo: worker?.profile_photo ?? "",
     location: worker?.location ?? "Nairobi",
-    years_of_experience: String(worker?.years_of_experience ?? 2),
+    experience_value: String(experienceInput.value),
+    experience_unit: experienceInput.unit,
     bio: worker?.bio ?? "",
     availability_status: worker?.availability_status ?? "available",
     verification_status: worker?.verification_status ?? "pending",
@@ -320,6 +334,10 @@ export function AdminWorkersClient({
     );
     const canListPublicly =
       draft.verification_status === "verified" && draft.listed_publicly;
+    const experienceMonths = normalizeExperienceMonths(
+      draft.experience_value,
+      draft.experience_unit,
+    );
 
     const nextWorker: Worker = {
       id,
@@ -327,7 +345,8 @@ export function AdminWorkersClient({
       primary_role: draft.primary_role,
       profile_photo: draft.profile_photo || selectedWorker?.profile_photo || "",
       location: draft.location,
-      years_of_experience: Number(draft.years_of_experience),
+      years_of_experience: experienceYearsFromMonths(experienceMonths),
+      experience_months: experienceMonths,
       bio: draft.bio,
       availability_status: draft.availability_status,
       verification_status: draft.verification_status,
@@ -386,6 +405,7 @@ export function AdminWorkersClient({
           ]
         : [],
       active_assignment: existingWorker?.active_assignment ?? null,
+      active_booking_count: existingWorker?.active_booking_count ?? 0,
     };
 
     startTransition(() => {
@@ -469,6 +489,9 @@ export function AdminWorkersClient({
                   {verificationLabel(worker.verification_status)}
                 </Badge>
                 <Badge variant="outline">{availabilityLabel(worker.availability_status)}</Badge>
+                <Badge variant="outline">
+                  {activeBookingCountLabel(worker.active_booking_count)}
+                </Badge>
               </div>
             </button>
           ))}
@@ -659,19 +682,43 @@ export function AdminWorkersClient({
               </div>
               <div className="space-y-2">
                 <label className="text-sm font-medium text-[color:var(--foreground)]">
-                  Years of experience
+                  Experience
                 </label>
-                <Input
-                  type="number"
-                  min="0"
-                  value={draft.years_of_experience}
-                  onChange={(event) =>
-                    setDraft((current) => ({
-                      ...current,
-                      years_of_experience: event.target.value,
-                    }))
-                  }
-                />
+                <div className="grid grid-cols-[minmax(0,1fr)_140px] gap-2">
+                  <Input
+                    type="number"
+                    min="0"
+                    value={draft.experience_value}
+                    onChange={(event) =>
+                      setDraft((current) => ({
+                        ...current,
+                        experience_value: event.target.value,
+                      }))
+                    }
+                    aria-label="Experience value"
+                  />
+                  <Select
+                    value={draft.experience_unit}
+                    onChange={(event) =>
+                      setDraft((current) => ({
+                        ...current,
+                        experience_unit: event.target.value as ExperienceUnit,
+                      }))
+                    }
+                    aria-label="Experience unit"
+                  >
+                    <option value="months">Months</option>
+                    <option value="years">Years</option>
+                  </Select>
+                </div>
+                <p className="text-xs font-bold text-[color:var(--muted-foreground)]">
+                  {formatExperienceMonths(
+                    normalizeExperienceMonths(
+                      draft.experience_value,
+                      draft.experience_unit,
+                    ),
+                  )}
+                </p>
               </div>
               <div className="space-y-2 md:col-span-2">
                 <label className="text-sm font-medium text-[color:var(--foreground)]">

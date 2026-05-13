@@ -3,6 +3,17 @@ import {
   defaultPaymentInstructions,
 } from "@/lib/booking-workflow";
 import {
+  DEFAULT_MAX_ACTIVE_BOOKINGS_PER_WORKER,
+  WORKER_CAPACITY_SETTING_KEY,
+  isActiveBookingStatus,
+  normalizeWorkerCapacityLimit,
+} from "@/lib/capacity-rules";
+import {
+  formatExperienceMonths,
+  minimumExperienceMonths,
+  workerExperienceMonths,
+} from "@/lib/experience";
+import {
   adminActivityLogs,
   adminNotes,
   bookings,
@@ -43,6 +54,7 @@ import type {
   VerificationDocumentStatus,
   VerificationStatus,
   Worker,
+  WorkerCapacitySettings,
   WorkerRole,
   WorkType,
 } from "@/lib/types";
@@ -70,6 +82,22 @@ const hireStatuses = ["active", "completed"] as const;
 
 function getReadableSupabaseClient() {
   return createSupabaseServiceClient() ?? createSupabaseServerClient();
+}
+
+function parseCapacitySettingValue(value: unknown) {
+  if (typeof value === "number") {
+    return normalizeWorkerCapacityLimit(value);
+  }
+
+  if (typeof value === "string") {
+    return normalizeWorkerCapacityLimit(value);
+  }
+
+  if (isRecord(value)) {
+    return normalizeWorkerCapacityLimit(value.limit);
+  }
+
+  return DEFAULT_MAX_ACTIVE_BOOKINGS_PER_WORKER;
 }
 
 function pickEnumValue<T extends string>(
@@ -120,6 +148,7 @@ type SupabaseWorkerRow = {
   profile_photo: string | null;
   location: string | null;
   years_of_experience: number | null;
+  experience_months?: number | null;
   bio: string | null;
   availability_status: string | null;
   verification_status: string | null;
@@ -204,6 +233,7 @@ async function getWorkersFromSupabase(): Promise<Worker[]> {
         "profile_photo",
         "location",
         "years_of_experience",
+        "experience_months",
         "bio",
         "availability_status",
         "verification_status",
@@ -231,6 +261,7 @@ async function getWorkersFromSupabase(): Promise<Worker[]> {
     referencesResult,
     notesResult,
     assignmentsResult,
+    bookingWorkersResult,
   ] = await Promise.all([
     getSkillsFromSupabase(),
     supabase
@@ -257,7 +288,41 @@ async function getWorkersFromSupabase(): Promise<Worker[]> {
       .from("staffing_assignments")
       .select("id, team_request_id, team_request_role_id, worker_id, status, assigned_by, assigned_at, notes")
       .in("worker_id", workerIds),
+    supabase
+      .from("booking_workers")
+      .select("booking_id, worker_id")
+      .in("worker_id", workerIds),
   ]);
+  const bookingWorkerRows =
+    (bookingWorkersResult.data ?? []) as SupabaseBookingWorkerRow[];
+  const bookingIdsForWorkers = Array.from(
+    new Set(bookingWorkerRows.map((item) => item.booking_id)),
+  );
+  const { data: activeBookingRows } =
+    bookingIdsForWorkers.length > 0
+      ? await supabase
+          .from("bookings")
+          .select("id, status")
+          .in("id", bookingIdsForWorkers)
+          .in("status", ["pending", "confirmed", "paid"])
+      : { data: [] };
+  const activeBookingIds = new Set(
+    ((activeBookingRows ?? []) as Array<{ id: string; status: string | null }>)
+      .filter((booking) => isActiveBookingStatus(booking.status ?? ""))
+      .map((booking) => booking.id),
+  );
+  const activeBookingCountsByWorker = new Map<string, number>();
+
+  bookingWorkerRows.forEach((item) => {
+    if (!activeBookingIds.has(item.booking_id)) {
+      return;
+    }
+
+    activeBookingCountsByWorker.set(
+      item.worker_id,
+      (activeBookingCountsByWorker.get(item.worker_id) ?? 0) + 1,
+    );
+  });
 
   const assignmentRows = assignmentsResult.data ?? [];
   const requestIds = Array.from(
@@ -316,6 +381,10 @@ async function getWorkersFromSupabase(): Promise<Worker[]> {
       profile_photo: worker.profile_photo ?? "",
       location: worker.location ?? "Nairobi",
       years_of_experience: Math.max(Number(worker.years_of_experience) || 0, 0),
+      experience_months: workerExperienceMonths({
+        experience_months: worker.experience_months,
+        years_of_experience: Math.max(Number(worker.years_of_experience) || 0, 0),
+      }),
       bio: worker.bio ?? "",
       availability_status: pickEnumValue(
         worker.availability_status,
@@ -382,6 +451,7 @@ async function getWorkersFromSupabase(): Promise<Worker[]> {
           created_at: item.created_at,
         })),
       active_assignment: activeAssignmentsByWorker.get(worker.id) ?? null,
+      active_booking_count: activeBookingCountsByWorker.get(worker.id) ?? 0,
     };
   });
 }
@@ -398,6 +468,7 @@ function getHydratedRoles(requestId: string): TeamRequestRole[] {
     .filter((role) => role.team_request_id === requestId)
     .map((role) => ({
       ...role,
+      min_experience_months: minimumExperienceMonths(role),
       specialties: getRoleSkills(role.id),
     }));
 }
@@ -432,7 +503,14 @@ function getActiveAssignmentForWorker(workerId: string) {
   };
 }
 
-function hydrateWorker(id: string) {
+function getActiveBookingCountForWorker(workerId: string) {
+  return bookings.filter(
+    (booking) =>
+      bookingIsActive(booking.status) && booking.worker_ids.includes(workerId),
+  ).length;
+}
+
+function hydrateWorker(id: string): Worker | undefined {
   const worker = workers.find((item) => item.id === id);
 
   if (!worker) {
@@ -446,6 +524,7 @@ function hydrateWorker(id: string) {
 
   return {
     ...worker,
+    experience_months: workerExperienceMonths(worker),
     skills: relatedSkills,
     portfolio: portfolioImages.filter((item) => item.worker_id === id),
     verification_documents: verificationDocuments.filter(
@@ -454,6 +533,7 @@ function hydrateWorker(id: string) {
     reference_contacts: workerReferences.filter((item) => item.worker_id === id),
     internal_notes: adminNotes.filter((item) => item.worker_id === id),
     active_assignment: getActiveAssignmentForWorker(id),
+    active_booking_count: getActiveBookingCountForWorker(id),
   } satisfies Worker;
 }
 
@@ -475,6 +555,7 @@ function hydrateAssignment(
     request_role: requestRole
       ? {
           ...requestRole,
+          min_experience_months: minimumExperienceMonths(requestRole),
           specialties: getRoleSkills(requestRole.id),
         }
       : null,
@@ -508,7 +589,7 @@ function recommendWorkersForRole(
         return false;
       }
 
-      if (worker.years_of_experience < roleRequest.min_experience) {
+      if (workerExperienceMonths(worker) < minimumExperienceMonths(roleRequest)) {
         return false;
       }
 
@@ -549,7 +630,7 @@ function recommendWorkersForRole(
         worker.skills.some((skill) => skill.id === specialty.id),
       );
       const reasons = [
-        `${worker.years_of_experience} years experience`,
+        formatExperienceMonths(workerExperienceMonths(worker)),
         "Currently available for deployment",
       ];
 
@@ -565,7 +646,12 @@ function recommendWorkersForRole(
         worker,
         score:
           matchedSpecialties.length * 30 +
-          (worker.years_of_experience - roleRequest.min_experience) * 5 +
+          Math.max(
+            workerExperienceMonths(worker) - minimumExperienceMonths(roleRequest),
+            0,
+          ) /
+            12 *
+            5 +
           20,
         reasons,
         matched_specialties: matchedSpecialties,
@@ -574,13 +660,13 @@ function recommendWorkersForRole(
     .sort((left, right) => right.score - left.score);
 }
 
-export function getWorkers() {
+export function getWorkers(): Worker[] {
   return workers
     .map((worker) => hydrateWorker(worker.id))
     .filter((worker): worker is Worker => Boolean(worker))
     .sort((left, right) => {
       if (left.verification_status === right.verification_status) {
-        return right.years_of_experience - left.years_of_experience;
+        return workerExperienceMonths(right) - workerExperienceMonths(left);
       }
 
       if (left.verification_status === "verified") {
@@ -591,12 +677,40 @@ export function getWorkers() {
         return 1;
       }
 
-      return right.years_of_experience - left.years_of_experience;
+      return workerExperienceMonths(right) - workerExperienceMonths(left);
     });
 }
 
-export async function getWorkersAsync() {
+export async function getWorkersAsync(): Promise<Worker[]> {
   return mergeById(await getWorkersFromSupabase(), getWorkers());
+}
+
+export async function getWorkerCapacitySettingsAsync(): Promise<WorkerCapacitySettings> {
+  const supabase = getReadableSupabaseClient();
+
+  if (!supabase) {
+    return {
+      max_active_bookings_per_worker: DEFAULT_MAX_ACTIVE_BOOKINGS_PER_WORKER,
+    };
+  }
+
+  const { data, error } = await supabase
+    .from("admin_settings")
+    .select("value")
+    .eq("key", WORKER_CAPACITY_SETTING_KEY)
+    .maybeSingle();
+
+  if (error || !data) {
+    return {
+      max_active_bookings_per_worker: DEFAULT_MAX_ACTIVE_BOOKINGS_PER_WORKER,
+    };
+  }
+
+  return {
+    max_active_bookings_per_worker: parseCapacitySettingValue(
+      (data as { value?: unknown }).value,
+    ),
+  };
 }
 
 export function getPublicWorkers() {
@@ -742,6 +856,7 @@ type SupabaseTeamRequestRoleRow = {
   role: string;
   quantity: number | null;
   min_experience: number | null;
+  min_experience_months?: number | null;
 };
 
 type SupabaseBookingRow = {
@@ -870,7 +985,7 @@ async function getTeamRequestsFromSupabase(
     await Promise.all([
       supabase
         .from("team_request_roles")
-        .select("id, team_request_id, role, quantity, min_experience")
+        .select("id, team_request_id, role, quantity, min_experience, min_experience_months")
         .in("team_request_id", ids),
       supabase
         .from("team_request_role_specialties")
@@ -908,6 +1023,10 @@ async function getTeamRequestsFromSupabase(
       role: role.role,
       quantity: Math.max(Number(role.quantity) || 0, 0),
       min_experience: Math.max(Number(role.min_experience) || 0, 0),
+      min_experience_months: minimumExperienceMonths({
+        min_experience: Math.max(Number(role.min_experience) || 0, 0),
+        min_experience_months: role.min_experience_months,
+      }),
       specialties: specialtiesByRole.get(role.id) ?? [],
     };
 

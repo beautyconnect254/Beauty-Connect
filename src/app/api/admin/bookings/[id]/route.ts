@@ -3,7 +3,14 @@ import { randomUUID } from "node:crypto";
 import { NextResponse, type NextRequest } from "next/server";
 
 import { getAdminSession } from "@/lib/admin-auth";
-import { defaultPaymentInstructions } from "@/lib/booking-workflow";
+import {
+  ACTIVE_BOOKING_STATUSES,
+  defaultPaymentInstructions,
+} from "@/lib/booking-workflow";
+import {
+  WORKER_CAPACITY_SETTING_KEY,
+  normalizeWorkerCapacityLimit,
+} from "@/lib/capacity-rules";
 import { createSupabaseServiceClient } from "@/lib/supabase/server";
 
 interface RouteContext {
@@ -74,6 +81,86 @@ function errorResponse(message: string, status: number) {
   return NextResponse.json({ error: message }, { status });
 }
 
+function parseCapacitySettingValue(value: unknown) {
+  if (value && typeof value === "object" && !Array.isArray(value) && "limit" in value) {
+    return normalizeWorkerCapacityLimit((value as { limit?: unknown }).limit);
+  }
+
+  return normalizeWorkerCapacityLimit(value);
+}
+
+async function getWorkerCapacityLimit(
+  supabase: NonNullable<ReturnType<typeof createSupabaseServiceClient>>,
+) {
+  const { data, error } = await supabase
+    .from("admin_settings")
+    .select("value")
+    .eq("key", WORKER_CAPACITY_SETTING_KEY)
+    .maybeSingle();
+
+  if (error || !data) {
+    return normalizeWorkerCapacityLimit(1);
+  }
+
+  return parseCapacitySettingValue((data as { value?: unknown }).value);
+}
+
+async function getActiveBookingCounts(
+  supabase: NonNullable<ReturnType<typeof createSupabaseServiceClient>>,
+  workerIds: string[],
+  excludeBookingId: string,
+) {
+  const { data: bookingWorkerRows, error: bookingWorkerError } = await supabase
+    .from("booking_workers")
+    .select("booking_id, worker_id")
+    .in("worker_id", workerIds);
+
+  if (bookingWorkerError) {
+    throw bookingWorkerError;
+  }
+
+  const rows = (bookingWorkerRows ?? []) as Array<{
+    booking_id: string;
+    worker_id: string;
+  }>;
+  const bookingIds = Array.from(
+    new Set(
+      rows
+        .map((row) => row.booking_id)
+        .filter((bookingId) => bookingId !== excludeBookingId),
+    ),
+  );
+
+  if (bookingIds.length === 0) {
+    return new Map<string, number>();
+  }
+
+  const { data: bookingRows, error: bookingError } = await supabase
+    .from("bookings")
+    .select("id")
+    .in("id", bookingIds)
+    .in("status", [...ACTIVE_BOOKING_STATUSES]);
+
+  if (bookingError) {
+    throw bookingError;
+  }
+
+  const activeBookingIds = new Set(
+    (bookingRows ?? []).map((booking) => booking.id),
+  );
+  const counts = new Map<string, number>();
+
+  rows.forEach((row) => {
+    if (!activeBookingIds.has(row.booking_id)) {
+      return;
+    }
+
+    counts.set(row.worker_id, (counts.get(row.worker_id) ?? 0) + 1);
+  });
+
+  return counts;
+}
+
 export async function PATCH(request: NextRequest, context: RouteContext) {
   const adminSession = await getAdminSession();
 
@@ -120,6 +207,28 @@ export async function PATCH(request: NextRequest, context: RouteContext) {
   }
 
   if (payload.action === "confirm") {
+    try {
+      const [capacityLimit, activeCounts] = await Promise.all([
+        getWorkerCapacityLimit(supabase),
+        getActiveBookingCounts(supabase, payload.workerIds, id),
+      ]);
+      const blockedWorkerId = payload.workerIds.find(
+        (workerId) => (activeCounts.get(workerId) ?? 0) >= capacityLimit,
+      );
+
+      if (blockedWorkerId) {
+        return errorResponse(
+          `Worker ${blockedWorkerId} has reached the active booking capacity limit.`,
+          409,
+        );
+      }
+    } catch (error) {
+      return errorResponse(
+        error instanceof Error ? error.message : "Could not validate worker capacity.",
+        500,
+      );
+    }
+
     const instructions =
       booking.payment_instructions ??
       defaultPaymentInstructions({
@@ -151,7 +260,9 @@ export async function PATCH(request: NextRequest, context: RouteContext) {
     );
 
     if (workerError) {
-      return errorResponse(workerError.message, 500);
+      const status = workerError.message.includes("capacity") ? 409 : 500;
+
+      return errorResponse(workerError.message, status);
     }
 
     await supabase

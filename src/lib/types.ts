@@ -49,6 +49,7 @@ export interface WorkerRecord {
   profile_photo: string;
   location: string;
   years_of_experience: number;
+  experience_months?: number;
   bio: string;
   availability_status: AvailabilityStatus;
   verification_status: VerificationStatus;
@@ -117,6 +118,7 @@ export interface TeamRequestRoleRecord {
   role: WorkerRole;
   quantity: number;
   min_experience: number;
+  min_experience_months?: number;
 }
 
 export interface TeamRequestRoleSkillRecord {
@@ -219,6 +221,7 @@ export interface BookingRequestDetails {
     role: string;
     quantity: number;
     min_experience?: number;
+    min_experience_months?: number;
     experience_label?: string;
     specialty_ids?: string[];
     specialty_names?: string[];
@@ -259,6 +262,11 @@ export interface Worker extends WorkerRecord {
   reference_contacts: WorkerReferenceRecord[];
   internal_notes: AdminNoteRecord[];
   active_assignment: WorkerPlacementSummary | null;
+  active_booking_count: number;
+}
+
+export interface WorkerCapacitySettings {
+  max_active_bookings_per_worker: number;
 }
 
 export interface TeamRequestRole extends TeamRequestRoleRecord {

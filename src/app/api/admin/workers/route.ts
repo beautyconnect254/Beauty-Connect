@@ -4,6 +4,11 @@ import { revalidatePath } from "next/cache";
 import { NextResponse, type NextRequest } from "next/server";
 
 import { getAdminSession } from "@/lib/admin-auth";
+import {
+  experienceYearsFromMonths,
+  normalizeExperienceMonths,
+  type ExperienceUnit,
+} from "@/lib/experience";
 import { createSupabaseServiceClient } from "@/lib/supabase/server";
 import type { AvailabilityStatus, SkillRecord, Worker, WorkerRole } from "@/lib/types";
 
@@ -22,6 +27,7 @@ interface WorkerCreatePayload {
   profile_photo: string;
   portfolio_urls: string[];
   years_of_experience: number;
+  experience_months: number;
   bio: string;
   primary_role: WorkerRole;
   location: string;
@@ -38,6 +44,10 @@ function cleanNumber(value: unknown) {
   const number = Number(value);
 
   return Number.isFinite(number) ? Math.max(Math.floor(number), 0) : 0;
+}
+
+function normalizeExperienceUnit(value: unknown): ExperienceUnit {
+  return value === "months" ? "months" : "years";
 }
 
 function slugify(value: string) {
@@ -68,6 +78,13 @@ function normalizePayload(input: unknown): WorkerCreatePayload | null {
         .filter((skill) => skill.id && skill.name && skill.role)
     : [];
   const availability = cleanText(record.availability_status);
+  const explicitExperienceMonths = Number(record.experience_months);
+  const experienceMonths = Number.isFinite(explicitExperienceMonths)
+    ? cleanNumber(explicitExperienceMonths)
+    : normalizeExperienceMonths(
+        record.experience_value ?? record.years_of_experience,
+        normalizeExperienceUnit(record.experience_unit),
+      );
 
   return {
     full_name: cleanText(record.full_name),
@@ -77,7 +94,8 @@ function normalizePayload(input: unknown): WorkerCreatePayload | null {
     portfolio_urls: Array.isArray(record.portfolio_urls)
       ? record.portfolio_urls.map(cleanText).filter(Boolean)
       : [],
-    years_of_experience: cleanNumber(record.years_of_experience),
+    years_of_experience: experienceYearsFromMonths(experienceMonths),
+    experience_months: experienceMonths,
     bio: cleanText(record.bio),
     primary_role: cleanText(record.primary_role),
     location: cleanText(record.location) || "Nairobi",
@@ -177,6 +195,7 @@ export async function POST(request: NextRequest) {
       profile_photo: payload.profile_photo,
       location: payload.location,
       years_of_experience: payload.years_of_experience,
+      experience_months: payload.experience_months,
       bio,
       availability_status: payload.availability_status,
       verification_status: verificationStatus,
@@ -248,6 +267,7 @@ export async function POST(request: NextRequest) {
       profile_photo: payload.profile_photo,
       location: payload.location,
       years_of_experience: payload.years_of_experience,
+      experience_months: payload.experience_months,
       bio,
       availability_status: payload.availability_status,
       verification_status: verificationStatus,
@@ -285,6 +305,7 @@ export async function POST(request: NextRequest) {
         },
       ],
       active_assignment: null,
+      active_booking_count: 0,
     };
 
     revalidatePath("/workers");

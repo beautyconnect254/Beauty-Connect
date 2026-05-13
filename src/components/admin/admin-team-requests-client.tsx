@@ -15,6 +15,11 @@ import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Textarea } from "@/components/ui/textarea";
+import {
+  formatExperienceMonths,
+  minimumExperienceMonths,
+  workerExperienceMonths,
+} from "@/lib/experience";
 import type {
   StaffingAssignment,
   StaffingAssignmentStatus,
@@ -67,7 +72,7 @@ export function AdminTeamRequestsClient({
               return false;
             }
 
-            if (worker.years_of_experience < roleRequest.min_experience) {
+            if (workerExperienceMonths(worker) < minimumExperienceMonths(roleRequest)) {
               return false;
             }
 
@@ -115,10 +120,15 @@ export function AdminTeamRequestsClient({
               matched_specialties: matchedSpecialties,
               score:
                 matchedSpecialties.length * 30 +
-                (worker.years_of_experience - roleRequest.min_experience) * 5 +
+                (Math.max(
+                  workerExperienceMonths(worker) - minimumExperienceMonths(roleRequest),
+                  0,
+                ) /
+                  12) *
+                  5 +
                 20,
               reasons: [
-                `${worker.years_of_experience} years experience`,
+                formatExperienceMonths(workerExperienceMonths(worker)),
                 "Available for staffing deployment",
                 matchedSpecialties.length > 0
                   ? `Matches ${matchedSpecialties.length} requested specialties`
@@ -562,7 +572,9 @@ export function AdminTeamRequestsClient({
                       </p>
                       <p className="text-sm text-[color:var(--muted-foreground)]">
                         {roleGroup.role_request.quantity} seats ·{" "}
-                        {roleGroup.role_request.min_experience}+ years minimum
+                        {formatExperienceMonths(
+                          minimumExperienceMonths(roleGroup.role_request),
+                        )} minimum
                       </p>
                     </div>
                     <div className="flex flex-wrap gap-2">
@@ -592,7 +604,9 @@ export function AdminTeamRequestsClient({
                               </p>
                               <p className="text-sm text-[color:var(--muted-foreground)]">
                                 {recommendation.worker.location} ·{" "}
-                                {recommendation.worker.years_of_experience} years
+                                {formatExperienceMonths(
+                                  workerExperienceMonths(recommendation.worker),
+                                )}
                               </p>
                             </div>
                             <Badge variant="outline">

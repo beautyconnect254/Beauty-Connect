@@ -3,13 +3,15 @@ import { PageIntro } from "@/components/shared/page-intro";
 import {
   getAdminActivityLogs,
   getBookingsAsync,
+  getWorkerCapacitySettingsAsync,
   getWorkersAsync,
 } from "@/lib/data-access";
 
 export default async function AdminConfirmedTeamBookingsPage() {
-  const [bookings, workers] = await Promise.all([
+  const [bookings, workers, capacitySettings] = await Promise.all([
     getBookingsAsync(),
     getWorkersAsync(),
+    getWorkerCapacitySettingsAsync(),
   ]);
 
   return (
@@ -25,6 +27,7 @@ export default async function AdminConfirmedTeamBookingsPage() {
         initialActivityLogs={getAdminActivityLogs()}
         status="confirmed"
         type="team"
+        capacityLimit={capacitySettings.max_active_bookings_per_worker}
       />
     </div>
   );

@@ -7,6 +7,7 @@ import { motion } from "framer-motion";
 
 import { Badge } from "@/components/ui/badge";
 import { Card } from "@/components/ui/card";
+import { formatExperienceMonths, workerExperienceMonths } from "@/lib/experience";
 import type { Worker, WorkerRole } from "@/lib/types";
 import { availabilityLabel, cn, verificationLabel } from "@/lib/utils";
 
@@ -90,7 +91,9 @@ export function WorkerCard({ worker, compact = false }: WorkerCardProps) {
             <div className="grid min-w-0 gap-1 text-[11px] font-medium text-[color:var(--muted-foreground)]">
               <span className="flex min-w-0 items-center gap-1.5">
                 <BriefcaseBusiness className="h-3.5 w-3.5 shrink-0 text-emerald-700" />
-                <span className="truncate">{worker.years_of_experience} years experience</span>
+                <span className="truncate">
+                  {formatExperienceMonths(workerExperienceMonths(worker))}
+                </span>
               </span>
               <span className="flex min-w-0 items-center gap-1.5">
                 <MapPin className="h-3.5 w-3.5 shrink-0 text-emerald-700" />

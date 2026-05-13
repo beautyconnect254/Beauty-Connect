@@ -1,7 +1,7 @@
 "use client";
 
 import type { ReactNode } from "react";
-import { useMemo, useState } from "react";
+import { useEffect, useMemo, useState } from "react";
 import { format } from "date-fns";
 import { AnimatePresence, motion } from "framer-motion";
 import {
@@ -21,6 +21,10 @@ import { Button } from "@/components/ui/button";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Input } from "@/components/ui/input";
 import { Select } from "@/components/ui/select";
+import {
+  readSalonAutofill,
+  saveSalonAutofill,
+} from "@/lib/salon-autofill";
 import type { RoleSpecialtyCatalog, TeamWorkType } from "@/lib/types";
 import { cn, totalHeadcount } from "@/lib/utils";
 
@@ -66,6 +70,19 @@ const defaultDraft: DraftRequest = {
   work_type: "long-term-contract",
   target_start_date: "",
 };
+
+function mergeDraftWithCachedSalonDetails(current: DraftRequest): DraftRequest {
+  const cached = readSalonAutofill();
+
+  return {
+    ...current,
+    salon_name: current.salon_name || cached.salonName,
+    contact_name: current.contact_name || cached.contactName,
+    contact_email: current.contact_email || cached.contactEmail,
+    contact_whatsapp: current.contact_whatsapp || cached.contactPhone,
+    location: current.location || cached.location,
+  };
+}
 
 function roleId(role: string) {
   return `draft-role-${role.toLowerCase().replace(/[^a-z0-9]+/g, "-")}`;
@@ -165,6 +182,12 @@ export function TeamBuilderClient({ roleCatalog }: TeamBuilderClientProps) {
   const [submission, setSubmission] = useState<BookingSubmissionResult | null>(null);
   const [submitError, setSubmitError] = useState("");
 
+  useEffect(() => {
+    queueMicrotask(() => {
+      setDraft(mergeDraftWithCachedSalonDetails);
+    });
+  }, []);
+
   const selectedRoles = roles.filter((item) => item.quantity > 0);
   const headcount = totalHeadcount(selectedRoles);
 
@@ -260,6 +283,7 @@ export function TeamBuilderClient({ roleCatalog }: TeamBuilderClientProps) {
             role: role.role,
             quantity: role.quantity,
             minExperience: minExperienceYears(role),
+            minExperienceMonths: experienceMonths(role),
             experienceLabel: experienceLabel(role),
             specialtyIds: role.specialty_ids,
             specialtyNames,
@@ -285,6 +309,13 @@ export function TeamBuilderClient({ roleCatalog }: TeamBuilderClientProps) {
       setSubmission({
         ...result,
         submittedAt: new Date().toISOString(),
+      });
+      saveSalonAutofill({
+        salonName: draft.salon_name,
+        contactName: draft.contact_name,
+        contactEmail: draft.contact_email,
+        contactPhone: draft.contact_whatsapp,
+        location: draft.location,
       });
     } catch (error) {
       setSubmitError(

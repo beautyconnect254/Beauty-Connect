@@ -18,6 +18,7 @@ export interface Database {
           profile_photo: string;
           location: string;
           years_of_experience: number;
+          experience_months: number;
           bio: string;
           availability_status: string;
           verification_status: string;
@@ -165,6 +166,7 @@ export interface Database {
           role: string;
           quantity: number;
           min_experience: number;
+          min_experience_months: number;
           created_at: string;
         };
         Insert: Partial<Database["public"]["Tables"]["team_request_roles"]["Row"]> & {
@@ -341,6 +343,18 @@ export interface Database {
         Update: Partial<
           Database["public"]["Tables"]["admin_email_whitelist"]["Row"]
         >;
+      };
+      admin_settings: {
+        Row: {
+          key: string;
+          value: Json;
+          updated_at: string;
+        };
+        Insert: Partial<Database["public"]["Tables"]["admin_settings"]["Row"]> & {
+          key: string;
+          value: Json;
+        };
+        Update: Partial<Database["public"]["Tables"]["admin_settings"]["Row"]>;
       };
       admin_notes: {
         Row: {

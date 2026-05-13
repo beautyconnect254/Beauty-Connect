@@ -1,7 +1,7 @@
 "use client";
 
 import type { ReactNode } from "react";
-import { useEffect, useState } from "react";
+import { useCallback, useEffect, useState } from "react";
 import { AnimatePresence, motion } from "framer-motion";
 import { Send, X } from "lucide-react";
 
@@ -9,6 +9,10 @@ import { useAuth } from "@/components/auth/auth-provider";
 import { BookingTrackingSuccess } from "@/components/bookings/booking-tracking-success";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
+import {
+  readSalonAutofill,
+  saveSalonAutofill,
+} from "@/lib/salon-autofill";
 import type { Worker } from "@/lib/types";
 import { AUTH_INTENT_EVENT, type AuthIntent } from "@/lib/user-auth-shared";
 
@@ -38,6 +42,21 @@ const initialForm: SingleBookingForm = {
   location: "",
   preferredStartDate: "",
 };
+const duplicateWorkerRequestMessage = "You already requested this worker.";
+
+function mergeFormWithCachedSalonDetails(
+  current: SingleBookingForm,
+): SingleBookingForm {
+  const cached = readSalonAutofill();
+
+  return {
+    ...current,
+    salonName: current.salonName || cached.salonName,
+    contactName: current.contactName || cached.contactName,
+    contactNumber: current.contactNumber || cached.contactPhone,
+    location: current.location || cached.location,
+  };
+}
 
 export function WorkerBookingModal({ worker }: WorkerBookingModalProps) {
   const {
@@ -51,12 +70,59 @@ export function WorkerBookingModal({ worker }: WorkerBookingModalProps) {
   const [form, setForm] = useState(initialForm);
   const [errors, setErrors] = useState<Record<string, string>>({});
   const [isSubmitting, setIsSubmitting] = useState(false);
+  const [isCheckingDuplicate, setIsCheckingDuplicate] = useState(false);
   const [submission, setSubmission] = useState<BookingSubmissionResult | null>(null);
   const [submitError, setSubmitError] = useState("");
+  const [duplicateWarning, setDuplicateWarning] = useState("");
 
-  function openRequestFlow() {
+  const applyCachedSalonDetails = useCallback(function applyCachedSalonDetails() {
+    setForm(mergeFormWithCachedSalonDetails);
+  }, []);
+
+  const checkExistingRequest = useCallback(async function checkExistingRequest() {
+    const accessToken = getAccessToken();
+
+    if (!accessToken) {
+      return false;
+    }
+
+    setIsCheckingDuplicate(true);
+
+    try {
+      const response = await fetch(
+        `/api/bookings?workerId=${encodeURIComponent(worker.id)}`,
+        {
+          headers: {
+            Authorization: `Bearer ${accessToken}`,
+          },
+        },
+      );
+      const result = (await response.json().catch(() => null)) as {
+        duplicate?: boolean;
+        message?: string;
+      } | null;
+
+      if (response.ok && result?.duplicate) {
+        setDuplicateWarning(result.message || duplicateWorkerRequestMessage);
+        return true;
+      }
+
+      setDuplicateWarning("");
+      return false;
+    } catch {
+      return false;
+    } finally {
+      setIsCheckingDuplicate(false);
+    }
+  }, [getAccessToken, worker.id]);
+
+  const openRequestFlow = useCallback(function openRequestFlow() {
+    applyCachedSalonDetails();
     setOpen(true);
-  }
+    setSubmitError("");
+    setDuplicateWarning("");
+    void checkExistingRequest();
+  }, [applyCachedSalonDetails, checkExistingRequest]);
 
   function handleRequestClick() {
     requireAuth({
@@ -80,7 +146,7 @@ export function WorkerBookingModal({ worker }: WorkerBookingModalProps) {
         clearPendingIntent();
       });
     }
-  }, [clearPendingIntent, pendingIntent, user, worker.id]);
+  }, [clearPendingIntent, openRequestFlow, pendingIntent, user, worker.id]);
 
   useEffect(() => {
     function handleAuthIntent(event: Event) {
@@ -97,7 +163,7 @@ export function WorkerBookingModal({ worker }: WorkerBookingModalProps) {
     return () => {
       window.removeEventListener(AUTH_INTENT_EVENT, handleAuthIntent);
     };
-  }, [clearPendingIntent, worker.id]);
+  }, [clearPendingIntent, openRequestFlow, worker.id]);
 
   function validate() {
     const nextErrors: Record<string, string> = {};
@@ -115,6 +181,16 @@ export function WorkerBookingModal({ worker }: WorkerBookingModalProps) {
 
   async function submit() {
     if (!validate()) {
+      return;
+    }
+
+    if (duplicateWarning) {
+      setSubmitError(duplicateWorkerRequestMessage);
+      return;
+    }
+
+    if (await checkExistingRequest()) {
+      setSubmitError(duplicateWorkerRequestMessage);
       return;
     }
 
@@ -157,6 +233,12 @@ export function WorkerBookingModal({ worker }: WorkerBookingModalProps) {
         throw new Error("Could not submit booking.");
       }
 
+      saveSalonAutofill({
+        salonName: form.salonName,
+        contactName: form.contactName,
+        contactPhone: form.contactNumber,
+        location: form.location,
+      });
       setSubmission(result);
     } catch (error) {
       setSubmitError(
@@ -176,6 +258,7 @@ export function WorkerBookingModal({ worker }: WorkerBookingModalProps) {
       setErrors({});
       setSubmission(null);
       setSubmitError("");
+      setDuplicateWarning("");
       setIsSubmitting(false);
     }, 180);
   }
@@ -289,9 +372,15 @@ export function WorkerBookingModal({ worker }: WorkerBookingModalProps) {
                       }
                     />
                   </ModalField>
-                  <Button className="w-full" onClick={submit} disabled={isSubmitting}>
+                  <Button
+                    className="w-full"
+                    onClick={submit}
+                    disabled={isSubmitting || isCheckingDuplicate || Boolean(duplicateWarning)}
+                  >
                     {isSubmitting ? (
                       "Creating request..."
+                    ) : isCheckingDuplicate ? (
+                      "Checking request..."
                     ) : (
                       <>
                         <Send className="h-4 w-4" />
@@ -302,6 +391,11 @@ export function WorkerBookingModal({ worker }: WorkerBookingModalProps) {
                   {submitError ? (
                     <p className="rounded-md border border-rose-200 bg-rose-50 px-3 py-2 text-sm font-bold text-rose-700">
                       {submitError}
+                    </p>
+                  ) : null}
+                  {duplicateWarning ? (
+                    <p className="rounded-md border border-amber-200 bg-amber-50 px-3 py-2 text-sm font-bold text-amber-800">
+                      {duplicateWarning}
                     </p>
                   ) : null}
                 </div>

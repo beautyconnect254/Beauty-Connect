@@ -14,6 +14,8 @@ import { Button } from "@/components/ui/button";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Input } from "@/components/ui/input";
 import { Select } from "@/components/ui/select";
+import { activeBookingCountLabel } from "@/lib/capacity-rules";
+import { formatExperienceMonths, workerExperienceMonths } from "@/lib/experience";
 import type { Worker } from "@/lib/types";
 import { availabilityLabel, cn, verificationLabel } from "@/lib/utils";
 
@@ -159,11 +161,14 @@ export function AdminActiveWorkersClient({
                   ))}
                 </div>
                 <p className="text-sm font-semibold text-[color:var(--foreground)]">
-                  {worker.years_of_experience} yrs
+                  {formatExperienceMonths(workerExperienceMonths(worker))}
                 </p>
                 <div className="flex flex-wrap gap-1.5">
                   <Badge variant={statusVariant(worker.availability_status)}>
                     {availabilityLabel(worker.availability_status)}
+                  </Badge>
+                  <Badge variant="outline">
+                    {activeBookingCountLabel(worker.active_booking_count)}
                   </Badge>
                   <Badge variant={worker.listed_publicly ? "verified" : "outline"}>
                     {worker.listed_publicly ? "Listed" : "Off"}
@@ -270,6 +275,9 @@ export function AdminActiveWorkersClient({
                   {selectedWorker.active_assignment
                     ? `${availabilityLabel(selectedWorker.active_assignment.status === "hired" ? "hired" : "reserved")} on ${selectedWorker.active_assignment.salon_name}`
                     : "No reserved or hired assignment."}
+                </p>
+                <p className="mt-2 text-sm font-bold text-[color:var(--foreground)]">
+                  {activeBookingCountLabel(selectedWorker.active_booking_count)}
                 </p>
               </div>
 

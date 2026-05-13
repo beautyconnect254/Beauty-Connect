@@ -6,6 +6,7 @@ import {
   BriefcaseBusiness,
   CalendarCheck2,
   Clock3,
+  Gauge,
   LayoutDashboard,
   ListPlus,
   LogOut,
@@ -27,6 +28,10 @@ const navGroups = [
   {
     label: "Access",
     items: [{ href: "/admin/admins", label: "Admins", icon: ShieldCheck }],
+  },
+  {
+    label: "Settings",
+    items: [{ href: "/admin/capacity", label: "Worker Capacity", icon: Gauge }],
   },
   {
     label: "Workers",

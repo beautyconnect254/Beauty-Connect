@@ -18,6 +18,7 @@ import {
   bookingStatusLabel,
   defaultPaymentInstructions,
 } from "@/lib/booking-workflow";
+import { formatExperienceMonths, minimumExperienceMonths } from "@/lib/experience";
 import { createSupabaseServerClient } from "@/lib/supabase/server";
 import type {
   BookingRequestDetails,
@@ -240,8 +241,14 @@ export default async function TrackBookingPage({ params }: TrackPageProps) {
                       {role.quantity} x {role.role}
                     </p>
                     <p className="mt-1 text-xs leading-5 text-[color:var(--muted-foreground)]">
-                      {role.experience_label ?? `${role.min_experience ?? 0}+ years`}{" "}
-                      experience
+                      {role.experience_label
+                        ? `${role.experience_label} experience`
+                        : `${formatExperienceMonths(
+                            minimumExperienceMonths({
+                              min_experience: role.min_experience ?? 0,
+                              min_experience_months: role.min_experience_months,
+                            }),
+                          )} minimum`}
                     </p>
                     {role.specialty_names?.length ? (
                       <p className="mt-1 text-xs leading-5 text-[color:var(--muted-foreground)]">

@@ -8,6 +8,7 @@ import { Button } from "@/components/ui/button";
 import { Card, CardContent } from "@/components/ui/card";
 import { Input } from "@/components/ui/input";
 import { Select } from "@/components/ui/select";
+import { workerExperienceMonths } from "@/lib/experience";
 import type { SkillRecord, Worker } from "@/lib/types";
 
 interface WorkersExplorerProps {
@@ -108,7 +109,7 @@ export function WorkersExplorer({
         worker.availability_status === filters.availability;
 
       const matchesExperience =
-        worker.years_of_experience >= Number(filters.minExperience);
+        workerExperienceMonths(worker) >= Number(filters.minExperience);
 
       const matchesVerification =
         !filters.verifiedOnly || worker.verification_status === "verified";
@@ -125,7 +126,7 @@ export function WorkersExplorer({
     })
     .sort((left, right) => {
       if (filters.sortBy === "experience") {
-        return right.years_of_experience - left.years_of_experience;
+        return workerExperienceMonths(right) - workerExperienceMonths(left);
       }
 
       if (filters.sortBy === "salary-low") {
@@ -133,7 +134,7 @@ export function WorkersExplorer({
       }
 
       if (left.featured === right.featured) {
-        return right.years_of_experience - left.years_of_experience;
+        return workerExperienceMonths(right) - workerExperienceMonths(left);
       }
 
       return Number(right.featured) - Number(left.featured);
@@ -284,10 +285,11 @@ export function WorkersExplorer({
                     }
                   >
                     <option value="0">Any experience</option>
-                    <option value="2">2+ years</option>
-                    <option value="4">4+ years</option>
-                    <option value="6">6+ years</option>
-                    <option value="8">8+ years</option>
+                    <option value="6">6+ months</option>
+                    <option value="12">1+ year</option>
+                    <option value="24">2+ years</option>
+                    <option value="48">4+ years</option>
+                    <option value="72">6+ years</option>
                   </Select>
                 </FilterField>
               </div>

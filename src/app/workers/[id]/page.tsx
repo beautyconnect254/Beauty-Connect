@@ -13,6 +13,7 @@ import {
   getPublicWorkerByIdAsync,
   getPublicWorkersAsync,
 } from "@/lib/data-access";
+import { formatExperienceMonths, workerExperienceMonths } from "@/lib/experience";
 import { availabilityLabel, cn, verificationLabel } from "@/lib/utils";
 
 interface WorkerProfilePageProps {
@@ -105,7 +106,7 @@ export default async function WorkerProfilePage({
                     Experience
                   </p>
                   <p className="text-sm font-extrabold">
-                    {worker.years_of_experience} years
+                    {formatExperienceMonths(workerExperienceMonths(worker))}
                   </p>
                 </div>
                 <div className="rounded-md bg-[color:var(--muted)] p-3">

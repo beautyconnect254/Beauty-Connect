@@ -4,6 +4,12 @@ import {
   createSupabaseServerClient,
   createSupabaseServiceClient,
 } from "@/lib/supabase/server";
+import { ACTIVE_BOOKING_STATUSES } from "@/lib/booking-workflow";
+import {
+  WORKER_CAPACITY_SETTING_KEY,
+  normalizeWorkerCapacityLimit,
+} from "@/lib/capacity-rules";
+import { experienceYearsFromMonths } from "@/lib/experience";
 import type { TeamWorkType } from "@/lib/types";
 import { getAuthenticatedUserFromRequest } from "@/lib/user-auth";
 
@@ -22,6 +28,7 @@ interface TeamBookingPayload {
     role: string;
     quantity: number;
     minExperience: number;
+    minExperienceMonths: number;
     experienceLabel: string;
     specialtyIds: string[];
     specialtyNames: string[];
@@ -41,9 +48,22 @@ interface SingleBookingPayload {
 }
 
 type BookingPayload = TeamBookingPayload | SingleBookingPayload;
+type BookingSupabaseClient = NonNullable<
+  ReturnType<typeof createSupabaseServiceClient>
+>;
+
+const DUPLICATE_WORKER_REQUEST_MESSAGE = "You already requested this worker.";
+const CAPACITY_LIMIT_MESSAGE =
+  "Worker has reached the active booking capacity limit.";
 
 function cleanText(value: unknown) {
   return typeof value === "string" ? value.trim() : "";
+}
+
+function cleanNumber(value: unknown) {
+  const number = Number(value);
+
+  return Number.isFinite(number) ? Math.max(Math.floor(number), 0) : 0;
 }
 
 function appUrl(request: Request) {
@@ -116,8 +136,9 @@ function normalizePayload(payload: unknown): BookingPayload | null {
 
           return {
             role: cleanText(record.role),
-            quantity: Math.max(Number(record.quantity) || 0, 0),
-            minExperience: Math.max(Number(record.minExperience) || 0, 0),
+            quantity: cleanNumber(record.quantity),
+            minExperience: cleanNumber(record.minExperience),
+            minExperienceMonths: cleanNumber(record.minExperienceMonths),
             experienceLabel: cleanText(record.experienceLabel),
             specialtyIds,
             specialtyNames,
@@ -177,7 +198,7 @@ function validatePayload(payload: BookingPayload) {
 }
 
 async function createTeamRequest(
-  supabase: NonNullable<ReturnType<typeof createSupabaseServiceClient>>,
+  supabase: BookingSupabaseClient,
   payload: TeamBookingPayload,
   userId: string,
 ) {
@@ -207,7 +228,12 @@ async function createTeamRequest(
     team_request_id: teamRequestId,
     role: role.role,
     quantity: role.quantity,
-    min_experience: role.minExperience,
+    min_experience:
+      role.minExperience ||
+      experienceYearsFromMonths(role.minExperienceMonths),
+    min_experience_months:
+      role.minExperienceMonths ||
+      Math.max(role.minExperience, 0) * 12,
   }));
   const { error: rolesError } = await supabase
     .from("team_request_roles")
@@ -249,6 +275,183 @@ async function createTeamRequest(
   }
 
   return teamRequestId;
+}
+
+async function getActiveBookingIdsForWorker(
+  supabase: BookingSupabaseClient,
+  workerId: string,
+) {
+  const { data: bookingWorkerRows, error: bookingWorkerError } = await supabase
+    .from("booking_workers")
+    .select("booking_id")
+    .eq("worker_id", workerId);
+
+  if (bookingWorkerError) {
+    throw bookingWorkerError;
+  }
+
+  const bookingIds = Array.from(
+    new Set((bookingWorkerRows ?? []).map((item) => item.booking_id)),
+  );
+
+  if (bookingIds.length === 0) {
+    return [];
+  }
+
+  const { data: bookingRows, error: bookingError } = await supabase
+    .from("bookings")
+    .select("id")
+    .in("id", bookingIds)
+    .in("status", [...ACTIVE_BOOKING_STATUSES]);
+
+  if (bookingError) {
+    throw bookingError;
+  }
+
+  return (bookingRows ?? []).map((booking) => booking.id);
+}
+
+async function userHasActiveSingleWorkerBooking(
+  supabase: BookingSupabaseClient,
+  userId: string,
+  workerId: string,
+) {
+  const { data: bookingRows, error: bookingError } = await supabase
+    .from("bookings")
+    .select("id")
+    .eq("user_id", userId)
+    .eq("type", "worker")
+    .in("status", [...ACTIVE_BOOKING_STATUSES]);
+
+  if (bookingError) {
+    throw bookingError;
+  }
+
+  const bookingIds = (bookingRows ?? []).map((booking) => booking.id);
+
+  if (bookingIds.length === 0) {
+    return false;
+  }
+
+  const { data: duplicateRows, error: duplicateError } = await supabase
+    .from("booking_workers")
+    .select("booking_id")
+    .eq("worker_id", workerId)
+    .in("booking_id", bookingIds)
+    .limit(1);
+
+  if (duplicateError) {
+    throw duplicateError;
+  }
+
+  return (duplicateRows ?? []).length > 0;
+}
+
+async function getWorkerCapacityLimit(supabase: BookingSupabaseClient) {
+  const { data, error } = await supabase
+    .from("admin_settings")
+    .select("value")
+    .eq("key", WORKER_CAPACITY_SETTING_KEY)
+    .maybeSingle();
+
+  if (error || !data) {
+    return normalizeWorkerCapacityLimit(1);
+  }
+
+  const value = (data as { value?: unknown }).value;
+
+  if (value && typeof value === "object" && !Array.isArray(value) && "limit" in value) {
+    return normalizeWorkerCapacityLimit((value as { limit?: unknown }).limit);
+  }
+
+  return normalizeWorkerCapacityLimit(value);
+}
+
+async function validateSingleWorkerRequest(
+  supabase: BookingSupabaseClient,
+  userId: string,
+  workerId: string,
+) {
+  if (await userHasActiveSingleWorkerBooking(supabase, userId, workerId)) {
+    return DUPLICATE_WORKER_REQUEST_MESSAGE;
+  }
+
+  const [activeBookingIds, capacityLimit] = await Promise.all([
+    getActiveBookingIdsForWorker(supabase, workerId),
+    getWorkerCapacityLimit(supabase),
+  ]);
+
+  if (activeBookingIds.length >= capacityLimit) {
+    return CAPACITY_LIMIT_MESSAGE;
+  }
+
+  return "";
+}
+
+function responseStatusForBookingError(message: string) {
+  if (
+    message.includes(DUPLICATE_WORKER_REQUEST_MESSAGE) ||
+    message.includes(CAPACITY_LIMIT_MESSAGE)
+  ) {
+    return 409;
+  }
+
+  return 500;
+}
+
+function normalizeBookingErrorMessage(message: string) {
+  if (message.includes(DUPLICATE_WORKER_REQUEST_MESSAGE)) {
+    return DUPLICATE_WORKER_REQUEST_MESSAGE;
+  }
+
+  if (message.includes(CAPACITY_LIMIT_MESSAGE)) {
+    return CAPACITY_LIMIT_MESSAGE;
+  }
+
+  return message;
+}
+
+export async function GET(request: Request) {
+  const supabase = createSupabaseServiceClient() ?? createSupabaseServerClient();
+
+  if (!supabase) {
+    return Response.json(
+      { error: "Booking database is not configured." },
+      { status: 500 },
+    );
+  }
+
+  const user = await getAuthenticatedUserFromRequest(request);
+
+  if (!user) {
+    return Response.json(
+      { error: "Sign in before checking a booking." },
+      { status: 401 },
+    );
+  }
+
+  const workerId = cleanText(new URL(request.url).searchParams.get("workerId"));
+
+  if (!workerId) {
+    return Response.json({ error: "Worker is required." }, { status: 400 });
+  }
+
+  try {
+    const duplicate = await userHasActiveSingleWorkerBooking(
+      supabase,
+      user.id,
+      workerId,
+    );
+
+    return Response.json({
+      duplicate,
+      message: duplicate ? DUPLICATE_WORKER_REQUEST_MESSAGE : "",
+    });
+  } catch (error) {
+    const message = getErrorMessage(error);
+
+    return Response.json({ error: message }, { status: 500 });
+  }
 }
 
 function getErrorMessage(error: unknown) {
@@ -305,6 +508,32 @@ export async function POST(request: Request) {
   }
 
   try {
+    if (payload.type === "worker") {
+      const { data: workerExists, error: workerLookupError } = await supabase
+        .from("workers")
+        .select("id")
+        .eq("id", payload.workerId)
+        .maybeSingle();
+
+      if (workerLookupError) {
+        throw workerLookupError;
+      }
+
+      if (!workerExists) {
+        return Response.json({ error: "Worker not found." }, { status: 404 });
+      }
+
+      const workerRequestError = await validateSingleWorkerRequest(
+        supabase,
+        user.id,
+        payload.workerId,
+      );
+
+      if (workerRequestError) {
+        return Response.json({ error: workerRequestError }, { status: 409 });
+      }
+    }
+
     const trackingToken = await createTrackingToken(supabase);
     const bookingId = `booking-${randomUUID()}`;
     const bookingDate =
@@ -334,6 +563,7 @@ export async function POST(request: Request) {
               role: role.role,
               quantity: role.quantity,
               min_experience: role.minExperience,
+              min_experience_months: role.minExperienceMonths,
               experience_label: role.experienceLabel,
               specialty_ids: role.specialtyIds,
               specialty_names: role.specialtyNames,
@@ -379,21 +609,14 @@ export async function POST(request: Request) {
     }
 
     if (payload.type === "worker") {
-      const { data: workerExists } = await supabase
-        .from("workers")
-        .select("id")
-        .eq("id", payload.workerId)
-        .maybeSingle();
+      const { error: bookingWorkerError } = await supabase.from("booking_workers").insert({
+        booking_id: bookingId,
+        worker_id: payload.workerId,
+      });
 
-      if (workerExists) {
-        const { error: bookingWorkerError } = await supabase.from("booking_workers").insert({
-          booking_id: bookingId,
-          worker_id: payload.workerId,
-        });
-
-        if (bookingWorkerError) {
-          throw bookingWorkerError;
-        }
+      if (bookingWorkerError) {
+        await supabase.from("bookings").delete().eq("id", bookingId);
+        throw bookingWorkerError;
       }
     }
 
@@ -407,7 +630,11 @@ export async function POST(request: Request) {
     });
   } catch (error) {
     const message = getErrorMessage(error);
-    console.error("Booking creation failed:", message);
-    return Response.json({ error: message }, { status: 500 });
+    const normalizedMessage = normalizeBookingErrorMessage(message);
+    console.error("Booking creation failed:", normalizedMessage);
+    return Response.json(
+      { error: normalizedMessage },
+      { status: responseStatusForBookingError(message) },
+    );
   }
 }

@@ -17,7 +17,13 @@ import { Button } from "@/components/ui/button";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Input } from "@/components/ui/input";
 import { Textarea } from "@/components/ui/textarea";
+import { activeBookingCountLabel } from "@/lib/capacity-rules";
 import { defaultPaymentInstructions, paymentInstructionSummary } from "@/lib/booking-workflow";
+import {
+  formatExperienceMonths,
+  minimumExperienceMonths,
+  workerExperienceMonths,
+} from "@/lib/experience";
 import type {
   AdminActivityLogRecord,
   Booking,
@@ -34,6 +40,7 @@ interface AdminBookingsClientProps {
   initialActivityLogs: AdminActivityLogRecord[];
   status: Extract<BookingStatus, "pending" | "confirmed" | "paid">;
   type: BookingType;
+  capacityLimit: number;
 }
 
 type VerificationDecision = "confirmed_available" | "no_response" | "not_available";
@@ -79,33 +86,36 @@ function getRoleRequests(booking: Booking): TeamRequestRole[] {
       role: worker.primary_role,
       quantity: 1,
       min_experience: Math.max(worker.years_of_experience - 1, 0),
+      min_experience_months: Math.max(workerExperienceMonths(worker) - 12, 0),
       specialties: worker.skills.slice(0, 3),
     },
   ];
+}
+
+function workerActiveBookingCount(
+  worker: Worker,
+  allBookings: Booking[],
+  excludeBookingId?: string,
+) {
+  return allBookings.filter(
+    (item) => item.id !== excludeBookingId && item.worker_ids.includes(worker.id),
+  ).length;
 }
 
 function workerConflict(
   worker: Worker,
   booking: Booking,
   allBookings: Booking[],
+  capacityLimit: number,
 ) {
-  if (worker.availability_status === "reserved") {
-    return "Already Reserved";
-  }
-
-  if (worker.availability_status === "hired") {
-    return "Already Hired";
-  }
-
-  const pendingElsewhere = allBookings.some(
-    (item) =>
-      item.id !== booking.id &&
-      item.status === "pending" &&
-      item.worker_ids.includes(worker.id),
+  const activeElsewhere = workerActiveBookingCount(
+    worker,
+    allBookings,
+    booking.id,
   );
 
-  if (pendingElsewhere) {
-    return "Pending Elsewhere";
+  if (activeElsewhere >= capacityLimit) {
+    return `At capacity (${activeElsewhere}/${capacityLimit})`;
   }
 
   return "";
@@ -118,7 +128,12 @@ function scoreWorker(worker: Worker, role: TeamRequestRole) {
 
   return (
     specialtyMatches.length * 30 +
-    Math.max(worker.years_of_experience - role.min_experience, 0) * 5 +
+    (Math.max(
+      workerExperienceMonths(worker) - minimumExperienceMonths(role),
+      0,
+    ) /
+      12) *
+      5 +
     20
   );
 }
@@ -132,7 +147,7 @@ function matchesRole(worker: Worker, role: TeamRequestRole) {
 
   return (
     worker.primary_role === role.role &&
-    worker.years_of_experience >= role.min_experience &&
+    workerExperienceMonths(worker) >= minimumExperienceMonths(role) &&
     specialtyMatch
   );
 }
@@ -177,6 +192,7 @@ export function AdminBookingsClient({
   initialActivityLogs,
   status,
   type,
+  capacityLimit,
 }: AdminBookingsClientProps) {
   const [bookings, setBookings] = useState(initialBookings);
   const [workers, setWorkers] = useState(initialWorkers);
@@ -286,7 +302,7 @@ export function AdminBookingsClient({
       confirmedWorkerIds.includes(worker.id),
     );
     const blockedWorker = confirmedWorkers.find(
-      (worker) => workerConflict(worker, booking, bookings) !== "",
+      (worker) => workerConflict(worker, booking, bookings, capacityLimit) !== "",
     );
 
     if (confirmedWorkers.length === 0) {
@@ -296,7 +312,12 @@ export function AdminBookingsClient({
 
     if (blockedWorker) {
       setNotice(
-        `${blockedWorker.full_name} is ${workerConflict(blockedWorker, booking, bookings).toLowerCase()}. Remove the conflict before confirming.`,
+        `${blockedWorker.full_name} is ${workerConflict(
+          blockedWorker,
+          booking,
+          bookings,
+          capacityLimit,
+        ).toLowerCase()}. Remove the conflict before confirming.`,
       );
       return;
     }
@@ -460,7 +481,8 @@ export function AdminBookingsClient({
   }
 
   function renderWorkerRow(booking: Booking, worker: Worker, role?: TeamRequestRole) {
-    const conflict = workerConflict(worker, booking, bookings);
+    const conflict = workerConflict(worker, booking, bookings, capacityLimit);
+    const activeCount = workerActiveBookingCount(worker, bookings);
     const decision = verification[booking.id]?.[worker.id];
     const matchedSpecialties = role
       ? role.specialties.filter((specialty) =>
@@ -500,10 +522,14 @@ export function AdminBookingsClient({
               <Badge variant={conflict ? "pending" : "outline"}>
                 {conflict || availabilityLabel(worker.availability_status)}
               </Badge>
+              <Badge variant="outline">
+                {activeBookingCountLabel(activeCount)}
+              </Badge>
               {decision ? <Badge variant="verified">{verificationLabels[decision]}</Badge> : null}
             </div>
             <p className="mt-1 text-xs text-[color:var(--muted-foreground)]">
-              {worker.primary_role} - {worker.years_of_experience} yrs - score{" "}
+              {worker.primary_role} -{" "}
+              {formatExperienceMonths(workerExperienceMonths(worker))} - score{" "}
               {role ? scoreWorker(worker, role) : 20}
             </p>
             <div className="mt-2 flex flex-wrap gap-1.5">
@@ -589,7 +615,9 @@ export function AdminBookingsClient({
             </p>
             <p className="mt-1 text-sm font-semibold text-[color:var(--foreground)]">
               {roleRequests.length
-                ? `${Math.min(...roleRequests.map((role) => role.min_experience))}+ yrs`
+                ? formatExperienceMonths(
+                    Math.min(...roleRequests.map(minimumExperienceMonths)),
+                  )
                 : "Requested worker profile"}
             </p>
           </div>
@@ -625,11 +653,11 @@ export function AdminBookingsClient({
               .filter(
                 (worker) =>
                   worker.verification_status === "verified" &&
-                  workerConflict(worker, booking, bookings) === "",
+                  workerConflict(worker, booking, bookings, capacityLimit) === "",
               )
               .sort((left, right) => scoreWorker(right, role) - scoreWorker(left, role));
             const conflicts = roleMatches.filter(
-              (worker) => workerConflict(worker, booking, bookings) !== "",
+              (worker) => workerConflict(worker, booking, bookings, capacityLimit) !== "",
             );
 
             return (
@@ -640,7 +668,9 @@ export function AdminBookingsClient({
                       {role.role}
                     </p>
                     <p className="text-xs text-[color:var(--muted-foreground)]">
-                      {role.quantity} needed - {role.min_experience}+ yrs minimum
+                      {role.quantity} needed - {formatExperienceMonths(
+                        minimumExperienceMonths(role),
+                      )} minimum
                     </p>
                   </div>
                   <div className="flex flex-wrap gap-1.5">

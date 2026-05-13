@@ -316,6 +316,7 @@ create table if not exists public.workers (
   profile_photo text not null,
   location text not null,
   years_of_experience integer not null check (years_of_experience >= 0),
+  experience_months integer not null default 0 check (experience_months >= 0),
   bio text not null,
   availability_status public.availability_status not null default 'available',
   verification_status public.verification_status not null default 'pending',
@@ -331,6 +332,14 @@ create table if not exists public.workers (
 
 alter table public.workers
 add column if not exists id_number text not null default '';
+
+alter table public.workers
+add column if not exists experience_months integer not null default 0 check (experience_months >= 0);
+
+update public.workers
+set experience_months = greatest(years_of_experience, 0) * 12
+where experience_months = 0
+  and years_of_experience > 0;
 
 create table if not exists public.worker_references (
   id text primary key,
@@ -437,8 +446,17 @@ create table if not exists public.team_request_roles (
   role text not null,
   quantity integer not null check (quantity > 0),
   min_experience integer not null default 0 check (min_experience >= 0),
+  min_experience_months integer not null default 0 check (min_experience_months >= 0),
   created_at timestamptz not null default now()
 );
+
+alter table public.team_request_roles
+add column if not exists min_experience_months integer not null default 0 check (min_experience_months >= 0);
+
+update public.team_request_roles
+set min_experience_months = greatest(min_experience, 0) * 12
+where min_experience_months = 0
+  and min_experience > 0;
 
 create table if not exists public.team_request_role_specialties (
   id text primary key,
@@ -575,6 +593,16 @@ create table if not exists public.admin_email_whitelist (
   check (position('@' in email) > 1)
 );
 
+create table if not exists public.admin_settings (
+  key text primary key,
+  value jsonb not null,
+  updated_at timestamptz not null default now()
+);
+
+insert into public.admin_settings (key, value)
+values ('max_active_bookings_per_worker', '1'::jsonb)
+on conflict (key) do nothing;
+
 create table if not exists public.admin_notes (
   id text primary key,
   worker_id text references public.workers(id) on delete cascade,
@@ -631,6 +659,7 @@ create index if not exists verification_documents_worker_idx on public.verificat
 create index if not exists staffing_assignments_request_idx on public.staffing_assignments (team_request_id);
 create index if not exists staffing_assignments_worker_idx on public.staffing_assignments (worker_id);
 create index if not exists admin_email_whitelist_active_idx on public.admin_email_whitelist (active);
+create index if not exists admin_settings_updated_idx on public.admin_settings (updated_at);
 create index if not exists admin_notes_worker_idx on public.admin_notes (worker_id);
 create index if not exists admin_notes_team_request_idx on public.admin_notes (team_request_id);
 create index if not exists admin_notes_assignment_idx on public.admin_notes (staffing_assignment_id);
@@ -638,12 +667,103 @@ create index if not exists admin_activity_logs_booking_idx on public.admin_activ
 create index if not exists admin_activity_logs_worker_idx on public.admin_activity_logs (worker_id);
 create index if not exists admin_activity_logs_created_idx on public.admin_activity_logs (created_at);
 
-create unique index if not exists staffing_assignments_active_worker_idx
-on public.staffing_assignments (worker_id)
-where status in (
-  'reserved'::public.staffing_assignment_status,
-  'hired'::public.staffing_assignment_status
-);
+drop index if exists public.staffing_assignments_active_worker_idx;
+
+create or replace function public.max_active_bookings_per_worker()
+returns integer
+language sql
+stable
+as $$
+  select greatest(
+    coalesce(
+      (
+        select case
+          when jsonb_typeof(value) = 'number' then (value #>> '{}')::integer
+          when jsonb_typeof(value) = 'object' then nullif(value->>'limit', '')::integer
+          else null
+        end
+        from public.admin_settings
+        where key = 'max_active_bookings_per_worker'
+      ),
+      1
+    ),
+    1
+  );
+$$;
+
+create or replace function public.enforce_booking_worker_rules()
+returns trigger
+language plpgsql
+as $$
+declare
+  target_booking public.bookings%rowtype;
+  active_count integer;
+  capacity_limit integer;
+begin
+  select *
+  into target_booking
+  from public.bookings
+  where id = new.booking_id;
+
+  if not found or target_booking.status not in (
+    'pending'::public.booking_status,
+    'confirmed'::public.booking_status,
+    'paid'::public.booking_status
+  ) then
+    return new;
+  end if;
+
+  perform pg_advisory_xact_lock(hashtext(new.worker_id));
+
+  if target_booking.type = 'worker'
+    and target_booking.user_id is not null
+    and exists (
+      select 1
+      from public.booking_workers existing_worker
+      join public.bookings existing_booking
+        on existing_booking.id = existing_worker.booking_id
+      where existing_worker.worker_id = new.worker_id
+        and existing_worker.booking_id <> new.booking_id
+        and existing_booking.user_id = target_booking.user_id
+        and existing_booking.type = 'worker'
+        and existing_booking.status in (
+          'pending'::public.booking_status,
+          'confirmed'::public.booking_status,
+          'paid'::public.booking_status
+        )
+    )
+  then
+    raise exception 'You already requested this worker.';
+  end if;
+
+  capacity_limit := public.max_active_bookings_per_worker();
+
+  select count(*)
+  into active_count
+  from public.booking_workers existing_worker
+  join public.bookings existing_booking
+    on existing_booking.id = existing_worker.booking_id
+  where existing_worker.worker_id = new.worker_id
+    and existing_worker.booking_id <> new.booking_id
+    and existing_booking.status in (
+      'pending'::public.booking_status,
+      'confirmed'::public.booking_status,
+      'paid'::public.booking_status
+    );
+
+  if active_count >= capacity_limit then
+    raise exception 'Worker has reached the active booking capacity limit.';
+  end if;
+
+  return new;
+end;
+$$;
+
+drop trigger if exists booking_workers_enforce_rules on public.booking_workers;
+create trigger booking_workers_enforce_rules
+before insert or update of booking_id, worker_id on public.booking_workers
+for each row
+execute function public.enforce_booking_worker_rules();
 
 drop trigger if exists workers_set_updated_at on public.workers;
 create trigger workers_set_updated_at
@@ -654,6 +774,12 @@ execute function public.set_updated_at();
 drop trigger if exists worker_roles_set_updated_at on public.worker_roles;
 create trigger worker_roles_set_updated_at
 before update on public.worker_roles
+for each row
+execute function public.set_updated_at();
+
+drop trigger if exists admin_settings_set_updated_at on public.admin_settings;
+create trigger admin_settings_set_updated_at
+before update on public.admin_settings
 for each row
 execute function public.set_updated_at();
 
