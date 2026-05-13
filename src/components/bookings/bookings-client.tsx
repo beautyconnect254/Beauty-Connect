@@ -13,6 +13,7 @@ interface BookingsClientProps {
 const tabs: Array<{ value: BookingStatus; label: string }> = [
   { value: "pending", label: "Pending" },
   { value: "confirmed", label: "Confirmed" },
+  { value: "payment_pending", label: "Payment" },
   { value: "paid", label: "Paid" },
 ];
 
@@ -54,7 +55,7 @@ export function BookingsClient({ bookings }: BookingsClientProps) {
         })}
       </div>
 
-      <div className="grid grid-cols-2 gap-1 rounded-lg border border-[color:var(--border)] bg-white p-1">
+      <div className="grid grid-cols-2 gap-1 rounded-lg border border-[color:var(--border)] bg-white p-1 sm:grid-cols-4">
         {tabs.map((tab) => {
           const count = allBookings.filter(
             (booking) => booking.type === activeType && booking.status === tab.value,

@@ -4,6 +4,7 @@ import { format, parseISO } from "date-fns";
 import { ArrowLeft, CalendarDays, CreditCard, Users } from "lucide-react";
 
 import { ProtectedRouteGate } from "@/components/auth/protected-route-gate";
+import { BookingPaymentAction } from "@/components/bookings/booking-payment-action";
 import { PaymentInstructionsCard } from "@/components/bookings/payment-instructions-card";
 import {
   BookingStatusBadge,
@@ -18,6 +19,7 @@ import { getUserBookingById } from "@/lib/data-access";
 import {
   bookingRequiresPayment,
   bookingStatusDescription,
+  compensationSentence,
   paymentStatusLabel,
 } from "@/lib/booking-workflow";
 import { getCurrentUser } from "@/lib/user-auth";
@@ -121,7 +123,15 @@ export default async function BookingDetailPage({ params }: BookingDetailPagePro
         </Card>
 
         {bookingRequiresPayment(booking) && booking.payment_instructions ? (
-          <PaymentInstructionsCard instructions={booking.payment_instructions} />
+          <div className="space-y-3">
+            <PaymentInstructionsCard instructions={booking.payment_instructions} />
+            <BookingPaymentAction
+              bookingId={booking.id}
+              status={booking.status}
+              lockExpiresAt={booking.payment_lock_expires_at}
+              defaultPhone={booking.request_details?.client?.contact_whatsapp ?? ""}
+            />
+          </div>
         ) : null}
 
         <TrackingLinkCard trackingToken={booking.tracking_token} />
@@ -131,9 +141,22 @@ export default async function BookingDetailPage({ params }: BookingDetailPagePro
             Workers Included
           </h2>
           <div className="grid grid-cols-2 gap-2.5 sm:grid-cols-3 lg:grid-cols-4">
-            {booking.workers.map((worker) => (
-              <WorkerCard compact key={worker.id} worker={worker} />
-            ))}
+            {booking.workers.map((worker) => {
+              const assignment = booking.worker_assignments.find(
+                (item) => item.worker_id === worker.id,
+              );
+
+              return (
+                <div key={worker.id} className="space-y-1.5">
+                  <WorkerCard compact worker={worker} />
+                  {assignment ? (
+                    <p className="rounded-md bg-[color:var(--muted)] px-2 py-1 text-[11px] font-extrabold text-[color:var(--foreground)]">
+                      {compensationSentence(assignment)}
+                    </p>
+                  ) : null}
+                </div>
+              );
+            })}
           </div>
         </section>
       </div>

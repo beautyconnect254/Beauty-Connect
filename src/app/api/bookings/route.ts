@@ -4,7 +4,10 @@ import {
   createSupabaseServerClient,
   createSupabaseServiceClient,
 } from "@/lib/supabase/server";
-import { ACTIVE_BOOKING_STATUSES } from "@/lib/booking-workflow";
+import {
+  ACTIVE_BOOKING_STATUSES,
+  LOCKING_BOOKING_STATUSES,
+} from "@/lib/booking-workflow";
 import {
   WORKER_CAPACITY_SETTING_KEY,
   normalizeWorkerCapacityLimit,
@@ -300,15 +303,21 @@ async function getActiveBookingIdsForWorker(
 
   const { data: bookingRows, error: bookingError } = await supabase
     .from("bookings")
-    .select("id")
+    .select("id, status, payment_lock_expires_at")
     .in("id", bookingIds)
-    .in("status", [...ACTIVE_BOOKING_STATUSES]);
+    .in("status", [...LOCKING_BOOKING_STATUSES]);
 
   if (bookingError) {
     throw bookingError;
   }
 
-  return (bookingRows ?? []).map((booking) => booking.id);
+  return (bookingRows ?? [])
+    .filter(
+      (booking) =>
+        booking.status === "paid" ||
+        new Date(booking.payment_lock_expires_at ?? 0).getTime() > Date.now(),
+    )
+    .map((booking) => booking.id);
 }
 
 async function userHasActiveSingleWorkerBooking(

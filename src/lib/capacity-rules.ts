@@ -1,4 +1,4 @@
-import { ACTIVE_BOOKING_STATUSES } from "@/lib/booking-workflow";
+import { LOCKING_BOOKING_STATUSES } from "@/lib/booking-workflow";
 
 export const WORKER_CAPACITY_SETTING_KEY = "max_active_bookings_per_worker";
 export const DEFAULT_MAX_ACTIVE_BOOKINGS_PER_WORKER = 1;
@@ -14,11 +14,11 @@ export function normalizeWorkerCapacityLimit(value: unknown) {
 }
 
 export function isActiveBookingStatus(status: string) {
-  return ACTIVE_BOOKING_STATUSES.includes(
-    status as (typeof ACTIVE_BOOKING_STATUSES)[number],
+  return LOCKING_BOOKING_STATUSES.includes(
+    status as (typeof LOCKING_BOOKING_STATUSES)[number],
   );
 }
 
 export function activeBookingCountLabel(count: number) {
-  return `${count} active booking${count === 1 ? "" : "s"}`;
+  return `${count} locked booking${count === 1 ? "" : "s"}`;
 }

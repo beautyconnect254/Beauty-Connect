@@ -19,7 +19,7 @@ export default async function AdminConfirmedTeamBookingsPage() {
       <PageIntro
         eyebrow="Bookings"
         title="Confirmed Team Bookings"
-        description="Manage reserved teams, client payment instructions, and manual deposit verification."
+        description="Manage assigned teams, per-worker compensation terms, and deposit readiness before payment locks begin."
       />
       <AdminBookingsClient
         initialBookings={bookings}

@@ -32,12 +32,16 @@ export type FeaturedStatus = "active" | "scheduled" | "expired" | "off";
 export type BookingStatus =
   | "pending"
   | "confirmed"
+  | "payment_pending"
   | "paid"
+  | "expired"
   | "cancelled";
 
 export type BookingType = "worker" | "team";
 
 export type PaymentStatus = "not_due" | "deposit_due" | "deposit_paid" | "paid";
+
+export type CompensationType = "monthly" | "commission";
 
 export type HireStatus = "active" | "completed";
 
@@ -185,11 +189,16 @@ export interface BookingRecord {
   booking_date: string;
   submitted_at: string;
   worker_ids: string[];
+  worker_assignments?: BookingWorkerAssignmentRecord[];
   team_request_id: string | null;
   notes: string;
   request_details?: BookingRequestDetails | null;
   payment_instructions: PaymentInstructions | null;
   payment_verification: AdminPaymentVerification | null;
+  payment_lock_id?: string | null;
+  payment_started_at?: string | null;
+  payment_lock_expires_at?: string | null;
+  payment_completed_at?: string | null;
 }
 
 export interface HireRecord {
@@ -201,7 +210,24 @@ export interface HireRecord {
   payment_status: PaymentStatus;
   hire_date: string;
   worker_ids: string[];
+  worker_assignments?: HireWorkerAssignmentRecord[];
   payment_reference: string;
+}
+
+export interface BookingWorkerAssignmentRecord {
+  booking_id: string;
+  worker_id: string;
+  compensation_type: CompensationType;
+  salary_expectation: string;
+  commission_percentage: number | null;
+}
+
+export interface HireWorkerAssignmentRecord {
+  hire_id: string;
+  worker_id: string;
+  compensation_type: CompensationType;
+  salary_expectation: string;
+  commission_percentage: number | null;
 }
 
 export interface BookingRequestDetails {
@@ -301,6 +327,7 @@ export interface TeamRequest extends TeamRequestRecord {
 
 export interface Booking extends BookingRecord {
   workers: Worker[];
+  worker_assignments: BookingWorkerAssignment[];
   team_request: TeamRequest | null;
   worker_count: number;
 }
@@ -308,7 +335,16 @@ export interface Booking extends BookingRecord {
 export interface Hire extends HireRecord {
   booking: Booking | null;
   workers: Worker[];
+  worker_assignments: HireWorkerAssignment[];
   worker_count: number;
+}
+
+export interface BookingWorkerAssignment extends BookingWorkerAssignmentRecord {
+  worker: Worker;
+}
+
+export interface HireWorkerAssignment extends HireWorkerAssignmentRecord {
+  worker: Worker;
 }
 
 export interface WorkerCategory {

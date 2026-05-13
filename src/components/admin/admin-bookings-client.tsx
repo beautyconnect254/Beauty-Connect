@@ -4,10 +4,8 @@ import Image from "next/image";
 import { useMemo, useState } from "react";
 import { format, parseISO } from "date-fns";
 import {
-  BadgeCheck,
   CheckCircle2,
   ClipboardCheck,
-  Phone,
   ShieldAlert,
   UserMinus,
 } from "lucide-react";
@@ -16,9 +14,18 @@ import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Input } from "@/components/ui/input";
-import { Textarea } from "@/components/ui/textarea";
+import { Select } from "@/components/ui/select";
 import { activeBookingCountLabel } from "@/lib/capacity-rules";
-import { defaultPaymentInstructions, paymentInstructionSummary } from "@/lib/booking-workflow";
+import {
+  bookingLocksWorkers,
+  compensationSummary,
+  defaultCommissionPercentage,
+  defaultCompensationType,
+  defaultPaymentInstructions,
+  defaultSalaryExpectation,
+  normalizeCommissionPercentage,
+  paymentInstructionSummary,
+} from "@/lib/booking-workflow";
 import {
   formatExperienceMonths,
   minimumExperienceMonths,
@@ -29,6 +36,8 @@ import type {
   Booking,
   BookingStatus,
   BookingType,
+  BookingWorkerAssignmentRecord,
+  CompensationType,
   TeamRequestRole,
   Worker,
 } from "@/lib/types";
@@ -38,12 +47,17 @@ interface AdminBookingsClientProps {
   initialBookings: Booking[];
   initialWorkers: Worker[];
   initialActivityLogs: AdminActivityLogRecord[];
-  status: Extract<BookingStatus, "pending" | "confirmed" | "paid">;
+  status: Extract<BookingStatus, "pending" | "confirmed" | "payment_pending" | "paid">;
   type: BookingType;
   capacityLimit: number;
 }
 
 type VerificationDecision = "confirmed_available" | "no_response" | "not_available";
+type CompensationDraft = {
+  compensationType: CompensationType;
+  salaryExpectation: string;
+  commissionPercentage: string;
+};
 
 const verificationLabels: Record<VerificationDecision, string> = {
   confirmed_available: "Confirmed Available",
@@ -57,6 +71,8 @@ function statusTitle(status: AdminBookingsClientProps["status"]) {
       return "Pending";
     case "confirmed":
       return "Confirmed";
+    case "payment_pending":
+      return "Payment Pending";
     case "paid":
       return "Paid";
     default:
@@ -98,7 +114,10 @@ function workerActiveBookingCount(
   excludeBookingId?: string,
 ) {
   return allBookings.filter(
-    (item) => item.id !== excludeBookingId && item.worker_ids.includes(worker.id),
+    (item) =>
+      item.id !== excludeBookingId &&
+      bookingLocksWorkers(item.status) &&
+      item.worker_ids.includes(worker.id),
   ).length;
 }
 
@@ -162,16 +181,16 @@ async function readAdminError(response: Response) {
 
 async function persistAdminBookingAction(
   bookingId: string,
-  payload:
-    | {
-        action: "confirm";
-        workerIds: string[];
-      }
-    | {
-        action: "verify_payment";
-        paymentReference: string;
-        workerIds: string[];
-      },
+  payload: {
+    action: "confirm";
+    workerIds: string[];
+    workerAssignments: Array<{
+      workerId: string;
+      compensationType: CompensationType;
+      salaryExpectation: string;
+      commissionPercentage: number | null;
+    }>;
+  },
 ) {
   const response = await fetch(`/api/admin/bookings/${bookingId}`, {
     method: "PATCH",
@@ -186,6 +205,64 @@ async function persistAdminBookingAction(
   }
 }
 
+function compensationDraftFromWorker(worker: Worker): CompensationDraft {
+  const compensationType = defaultCompensationType(worker);
+
+  return {
+    compensationType,
+    salaryExpectation:
+      compensationType === "monthly" ? defaultSalaryExpectation(worker) : "",
+    commissionPercentage:
+      compensationType === "commission"
+        ? String(defaultCommissionPercentage(worker) ?? 50)
+        : "",
+  };
+}
+
+function compensationDraftFromAssignment(
+  assignment: BookingWorkerAssignmentRecord,
+  worker: Worker,
+): CompensationDraft {
+  return {
+    compensationType: assignment.compensation_type,
+    salaryExpectation:
+      assignment.compensation_type === "monthly"
+        ? assignment.salary_expectation || defaultSalaryExpectation(worker)
+        : "",
+    commissionPercentage:
+      assignment.compensation_type === "commission"
+        ? String(assignment.commission_percentage ?? 50)
+        : "",
+  };
+}
+
+function initialCompensationState(bookings: Booking[]) {
+  return bookings.reduce<Record<string, Record<string, CompensationDraft>>>(
+    (state, booking) => {
+      state[booking.id] = {};
+
+      booking.workers.forEach((worker) => {
+        const assignment = booking.worker_assignments.find(
+          (item) => item.worker_id === worker.id,
+        );
+
+        state[booking.id][worker.id] = assignment
+          ? compensationDraftFromAssignment(assignment, worker)
+          : compensationDraftFromWorker(worker);
+      });
+
+      return state;
+    },
+    {},
+  );
+}
+
+function findAssignment(booking: Booking, workerId: string) {
+  return booking.worker_assignments.find(
+    (assignment) => assignment.worker_id === workerId,
+  );
+}
+
 export function AdminBookingsClient({
   initialBookings,
   initialWorkers,
@@ -195,7 +272,7 @@ export function AdminBookingsClient({
   capacityLimit,
 }: AdminBookingsClientProps) {
   const [bookings, setBookings] = useState(initialBookings);
-  const [workers, setWorkers] = useState(initialWorkers);
+  const [workers] = useState(initialWorkers);
   const [activityLogs, setActivityLogs] = useState(initialActivityLogs);
   const visibleBookings = useMemo(
     () =>
@@ -212,7 +289,9 @@ export function AdminBookingsClient({
   const [verification, setVerificationState] = useState<
     Record<string, Record<string, VerificationDecision>>
   >({});
-  const [paymentRefs, setPaymentRefs] = useState<Record<string, string>>({});
+  const [compensations, setCompensations] = useState(() =>
+    initialCompensationState(initialBookings),
+  );
   const [notice, setNotice] = useState("");
   const activeBooking =
     visibleBookings.find((booking) => booking.id === selectedId) ??
@@ -245,6 +324,17 @@ export function AdminBookingsClient({
         [worker.id]: decision,
       },
     }));
+
+    if (decision === "confirmed_available") {
+      setCompensations((current) => ({
+        ...current,
+        [booking.id]: {
+          ...current[booking.id],
+          [worker.id]:
+            current[booking.id]?.[worker.id] ?? compensationDraftFromWorker(worker),
+        },
+      }));
+    }
 
     setBookings((current) =>
       current.map((item) =>
@@ -279,6 +369,16 @@ export function AdminBookingsClient({
   }
 
   function removeWorkerFromBooking(booking: Booking, workerId: string) {
+    setCompensations((current) => {
+      const bookingDrafts = { ...current[booking.id] };
+      delete bookingDrafts[workerId];
+
+      return {
+        ...current,
+        [booking.id]: bookingDrafts,
+      };
+    });
+
     setBookings((current) =>
       current.map((item) =>
         item.id === booking.id
@@ -293,6 +393,72 @@ export function AdminBookingsClient({
     );
   }
 
+  function updateCompensationDraft(
+    booking: Booking,
+    worker: Worker,
+    nextDraft: Partial<CompensationDraft>,
+  ) {
+    setCompensations((current) => {
+      const existing =
+        current[booking.id]?.[worker.id] ?? compensationDraftFromWorker(worker);
+      const compensationType =
+        nextDraft.compensationType ?? existing.compensationType;
+
+      return {
+        ...current,
+        [booking.id]: {
+          ...current[booking.id],
+          [worker.id]: {
+            ...existing,
+            ...nextDraft,
+            compensationType,
+            salaryExpectation:
+              compensationType === "monthly"
+                ? nextDraft.salaryExpectation ?? existing.salaryExpectation
+                : "",
+            commissionPercentage:
+              compensationType === "commission"
+                ? (nextDraft.commissionPercentage ??
+                    existing.commissionPercentage) || "50"
+                : "",
+          },
+        },
+      };
+    });
+  }
+
+  function buildWorkerAssignment(booking: Booking, worker: Worker) {
+    const draft =
+      compensations[booking.id]?.[worker.id] ?? compensationDraftFromWorker(worker);
+    const commissionPercentage = normalizeCommissionPercentage(
+      draft.commissionPercentage,
+    );
+
+    return {
+      workerId: worker.id,
+      compensationType: draft.compensationType,
+      salaryExpectation:
+        draft.compensationType === "monthly" ? draft.salaryExpectation.trim() : "",
+      commissionPercentage:
+        draft.compensationType === "commission" ? commissionPercentage : null,
+    };
+  }
+
+  function assignmentRecordFromDraft(
+    booking: Booking,
+    worker: Worker,
+  ): BookingWorkerAssignmentRecord {
+    const assignment = buildWorkerAssignment(booking, worker);
+
+    return {
+      booking_id: booking.id,
+      worker_id: worker.id,
+      compensation_type: assignment.compensationType,
+      salary_expectation: assignment.salaryExpectation,
+      commission_percentage: assignment.commissionPercentage,
+    };
+  }
+
   async function confirmBooking(booking: Booking) {
     const decisions = verification[booking.id] ?? {};
     const confirmedWorkerIds = Object.entries(decisions)
@@ -301,12 +467,30 @@ export function AdminBookingsClient({
     const confirmedWorkers = workers.filter((worker) =>
       confirmedWorkerIds.includes(worker.id),
     );
+    const workerAssignments = confirmedWorkers.map((worker) =>
+      buildWorkerAssignment(booking, worker),
+    );
     const blockedWorker = confirmedWorkers.find(
       (worker) => workerConflict(worker, booking, bookings, capacityLimit) !== "",
     );
 
     if (confirmedWorkers.length === 0) {
       setNotice("Confirm at least one worker as available before moving the booking.");
+      return;
+    }
+
+    const invalidAssignment = workerAssignments.find((assignment) =>
+      assignment.compensationType === "monthly"
+        ? !assignment.salaryExpectation
+        : assignment.commissionPercentage === null,
+    );
+
+    if (invalidAssignment) {
+      setNotice(
+        invalidAssignment.compensationType === "monthly"
+          ? "Enter salary expectation for each monthly worker."
+          : "Enter commission percentage for each commission worker.",
+      );
       return;
     }
 
@@ -331,6 +515,10 @@ export function AdminBookingsClient({
               payment_status: "deposit_due",
               worker_ids: confirmedWorkerIds,
               workers: confirmedWorkers,
+              worker_assignments: confirmedWorkers.map((worker) => ({
+                ...assignmentRecordFromDraft(booking, worker),
+                worker,
+              })),
               worker_count: confirmedWorkers.length,
               payment_instructions:
                 item.payment_instructions ??
@@ -344,133 +532,29 @@ export function AdminBookingsClient({
                 submitted_reference: null,
                 verified_by: null,
                 verified_at: null,
-                notes: "Awaiting manual deposit verification.",
+                notes: "Awaiting Daraja payment callback.",
               },
             }
           : item,
       ),
     );
 
-    setWorkers((current) =>
-      current.map((worker) =>
-        confirmedWorkerIds.includes(worker.id)
-          ? {
-              ...worker,
-              availability_status: "reserved",
-              active_assignment: {
-                team_request_id: booking.team_request_id ?? booking.id,
-                salon_name: booking.team_request?.salon_name ?? booking.title,
-                status: "reserved",
-                assigned_at: new Date().toISOString(),
-              },
-            }
-          : worker,
-      ),
-    );
-
     appendActivity({
       type: "booking_confirmed",
-      message: `${booking.title} moved from pending to confirmed.`,
+      message: `${booking.title} moved from pending to confirmed with compensation terms.`,
       booking_id: booking.id,
       worker_id: null,
-    });
-
-    confirmedWorkers.forEach((worker) => {
-      appendActivity({
-        type: "worker_reserved",
-        message: `${worker.full_name} reserved for ${booking.title}.`,
-        booking_id: booking.id,
-        worker_id: worker.id,
-      });
     });
 
     try {
       await persistAdminBookingAction(booking.id, {
         action: "confirm",
         workerIds: confirmedWorkerIds,
+        workerAssignments,
       });
-      setNotice(`${booking.title} confirmed. Selected workers are now reserved.`);
-    } catch (error) {
       setNotice(
-        `${booking.title} updated in this view, but could not save: ${
-          error instanceof Error ? error.message : "Unknown error"
-        }`,
+        `${booking.title} confirmed. Workers lock only when the client starts deposit payment.`,
       );
-    }
-  }
-
-  async function verifyPayment(booking: Booking) {
-    const reference =
-      paymentRefs[booking.id]?.trim() ||
-      booking.payment_verification?.submitted_reference ||
-      booking.payment_instructions?.payment_reference ||
-      `MANUAL-${booking.id.toUpperCase()}`;
-    const workerIds = booking.worker_ids;
-
-    setBookings((current) =>
-      current.map((item) =>
-        item.id === booking.id
-          ? {
-              ...item,
-              status: "paid",
-              payment_status: "deposit_paid",
-              payment_verification: {
-                status: "verified",
-                submitted_reference: reference,
-                verified_by: "Admin",
-                verified_at: new Date().toISOString(),
-                notes: "Deposit verified manually. Worker contacts released.",
-              },
-            }
-          : item,
-      ),
-    );
-
-    setWorkers((current) =>
-      current.map((worker) =>
-        workerIds.includes(worker.id)
-          ? {
-              ...worker,
-              availability_status: "hired",
-              active_assignment: worker.active_assignment
-                ? {
-                    ...worker.active_assignment,
-                    status: "hired",
-                  }
-                : {
-                    team_request_id: booking.team_request_id ?? booking.id,
-                    salon_name: booking.team_request?.salon_name ?? booking.title,
-                    status: "hired",
-                    assigned_at: new Date().toISOString(),
-                  },
-            }
-          : worker,
-      ),
-    );
-
-    appendActivity({
-      type: "payment_confirmed",
-      message: `${booking.title} payment verified manually with reference ${reference}.`,
-      booking_id: booking.id,
-      worker_id: null,
-    });
-
-    booking.workers.forEach((worker) => {
-      appendActivity({
-        type: "worker_released",
-        message: `${worker.full_name} contact details released to the client.`,
-        booking_id: booking.id,
-        worker_id: worker.id,
-      });
-    });
-
-    try {
-      await persistAdminBookingAction(booking.id, {
-        action: "verify_payment",
-        paymentReference: reference,
-        workerIds,
-      });
-      setNotice(`${booking.title} moved to paid. Worker contacts are released.`);
     } catch (error) {
       setNotice(
         `${booking.title} updated in this view, but could not save: ${
@@ -489,6 +573,14 @@ export function AdminBookingsClient({
           worker.skills.some((skill) => skill.id === specialty.id),
         )
       : [];
+    const assignment = findAssignment(booking, worker.id);
+    const draft =
+      compensations[booking.id]?.[worker.id] ??
+      (assignment
+        ? compensationDraftFromAssignment(assignment, worker)
+        : compensationDraftFromWorker(worker));
+    const showCompensationControls =
+      status === "pending" && decision === "confirmed_available";
 
     return (
       <div
@@ -541,8 +633,63 @@ export function AdminBookingsClient({
                 ),
               )}
             </div>
+            {assignment && status !== "pending" ? (
+              <p className="mt-2 rounded-md bg-[color:var(--muted)] px-2 py-1 text-xs font-bold text-[color:var(--foreground)]">
+                {compensationSummary(assignment)}
+              </p>
+            ) : null}
           </div>
         </div>
+
+        {showCompensationControls ? (
+          <div className="mt-3 grid gap-2 rounded-md border border-[color:var(--border)] bg-white p-2 sm:grid-cols-[150px_minmax(0,1fr)]">
+            <Select
+              aria-label={`${worker.full_name} compensation type`}
+              className="h-9 text-xs font-bold"
+              value={draft.compensationType}
+              onChange={(event) =>
+                updateCompensationDraft(booking, worker, {
+                  compensationType: event.target.value as CompensationType,
+                })
+              }
+            >
+              <option value="monthly">Monthly</option>
+              <option value="commission">Commission</option>
+            </Select>
+            {draft.compensationType === "monthly" ? (
+              <Input
+                className="h-9 text-xs font-bold"
+                placeholder="KSh 35,000/month"
+                value={draft.salaryExpectation}
+                onChange={(event) =>
+                  updateCompensationDraft(booking, worker, {
+                    salaryExpectation: event.target.value,
+                  })
+                }
+              />
+            ) : (
+              <div className="relative">
+                <Input
+                  className="h-9 pr-10 text-xs font-bold"
+                  inputMode="numeric"
+                  min={0}
+                  max={100}
+                  placeholder="50"
+                  type="number"
+                  value={draft.commissionPercentage}
+                  onChange={(event) =>
+                    updateCompensationDraft(booking, worker, {
+                      commissionPercentage: event.target.value,
+                    })
+                  }
+                />
+                <span className="pointer-events-none absolute right-3 top-1/2 -translate-y-1/2 text-xs font-extrabold text-[color:var(--muted-foreground)]">
+                  %
+                </span>
+              </div>
+            )}
+          </div>
+        ) : null}
 
         {status === "pending" ? (
           <div className="mt-3 flex flex-wrap gap-2">
@@ -635,10 +782,12 @@ export function AdminBookingsClient({
           <div className="flex items-center justify-between gap-3">
             <div>
               <p className="text-sm font-extrabold text-[color:var(--foreground)]">
-                Suggested Workers
+                {booking.type === "worker" ? "Requested Worker" : "Suggested Workers"}
               </p>
               <p className="text-xs text-[color:var(--muted-foreground)]">
-                Auto-matched by role, sub-specialty, availability, and experience.
+                {booking.type === "worker"
+                  ? "Single bookings only use the exact worker requested by the client."
+                  : "Auto-matched by role, sub-specialty, availability, and experience."}
               </p>
             </div>
             <Button onClick={() => void confirmBooking(booking)}>
@@ -648,11 +797,15 @@ export function AdminBookingsClient({
           </div>
 
           {roleRequests.map((role) => {
-            const roleMatches = workers.filter((worker) => matchesRole(worker, role));
+            const roleMatches =
+              booking.type === "worker"
+                ? booking.workers
+                : workers.filter((worker) => matchesRole(worker, role));
             const suggestions = roleMatches
               .filter(
                 (worker) =>
-                  worker.verification_status === "verified" &&
+                  (booking.type === "worker" ||
+                    worker.verification_status === "verified") &&
                   workerConflict(worker, booking, bookings, capacityLimit) === "",
               )
               .sort((left, right) => scoreWorker(right, role) - scoreWorker(left, role));
@@ -729,7 +882,7 @@ export function AdminBookingsClient({
         <section className="grid gap-3 md:grid-cols-3">
           <div className="rounded-md border border-[color:var(--border)] bg-white p-3">
             <p className="text-[11px] font-extrabold uppercase text-[color:var(--muted-foreground)]">
-              Reserved workers
+              Assigned workers
             </p>
             <p className="mt-1 text-sm font-semibold text-[color:var(--foreground)]">
               {booking.workers.map((worker) => worker.full_name).join(", ")}
@@ -756,7 +909,7 @@ export function AdminBookingsClient({
         <div className="grid gap-4 lg:grid-cols-[minmax(0,1fr)_320px]">
           <div className="space-y-2">
             <p className="text-sm font-extrabold text-[color:var(--foreground)]">
-              Reserved workers
+              Assigned workers
             </p>
             <div className="grid gap-2 lg:grid-cols-2">
               {booking.workers.map((worker) => renderWorkerRow(booking, worker))}
@@ -766,40 +919,33 @@ export function AdminBookingsClient({
           <div className="space-y-3 rounded-md border border-[color:var(--border)] bg-white p-3">
             <div>
               <p className="text-sm font-extrabold text-[color:var(--foreground)]">
-                Manual payment verification
+                Daraja payment status
               </p>
               <p className="mt-1 text-xs leading-5 text-[color:var(--muted-foreground)]">
-                No gateway is connected. Confirm the deposit reference after checking
-                M-Pesa or bank records.
+                M-Pesa callback is the only source of truth for paid bookings.
               </p>
             </div>
-            <Input
-              value={paymentRefs[booking.id] ?? booking.payment_verification?.submitted_reference ?? ""}
-              onChange={(event) =>
-                setPaymentRefs((current) => ({
-                  ...current,
-                  [booking.id]: event.target.value,
-                }))
-              }
-              placeholder="Payment reference"
-            />
-            <Textarea value={instructions.notes} readOnly className="min-h-20" />
             <div className="grid gap-2">
-              <Button onClick={() => void verifyPayment(booking)}>
-                <BadgeCheck className="h-4 w-4" />
-                Verify payment manually
-              </Button>
-              {booking.team_request?.contact_whatsapp ? (
-                <a
-                  href={`https://wa.me/${booking.team_request.contact_whatsapp.replace(/[^\d]/g, "")}`}
-                  target="_blank"
-                  rel="noreferrer"
-                  className="inline-flex h-10 items-center justify-center gap-2 rounded-md border border-[color:var(--border)] bg-white px-3 text-sm font-extrabold text-[color:var(--foreground)] hover:bg-[color:var(--muted)]"
-                >
-                  <Phone className="h-4 w-4" />
-                  Contact client
-                </a>
-              ) : null}
+              <div className="rounded-md bg-[color:var(--muted)] p-3">
+                <p className="text-[10px] font-bold uppercase text-[color:var(--muted-foreground)]">
+                  Platform fee
+                </p>
+                <p className="mt-1 text-sm font-extrabold text-[color:var(--foreground)]">
+                  {paymentInstructionSummary(instructions)}
+                </p>
+              </div>
+              <div className="rounded-md bg-purple-50 p-3 text-xs font-semibold leading-5 text-purple-900">
+                {booking.status === "payment_pending"
+                  ? `Payment lock active${
+                      booking.payment_lock_expires_at
+                        ? ` until ${format(parseISO(booking.payment_lock_expires_at), "HH:mm")}`
+                        : ""
+                    }. Awaiting Daraja callback.`
+                  : "Client can start STK Push from their confirmed booking view."}
+              </div>
+              <p className="rounded-md border border-[color:var(--border)] px-3 py-2 text-xs font-semibold leading-5 text-[color:var(--muted-foreground)]">
+                {instructions.notes}
+              </p>
             </div>
           </div>
         </div>
@@ -834,7 +980,7 @@ export function AdminBookingsClient({
             <p className="mt-1 text-sm font-semibold text-[color:var(--foreground)]">
               {booking.payment_verification?.submitted_reference ??
                 booking.payment_instructions?.payment_reference ??
-                "Verified manually"}
+                "Daraja confirmed"}
             </p>
           </div>
         </section>
@@ -870,6 +1016,11 @@ export function AdminBookingsClient({
                   <p className="mt-1 text-xs text-[color:var(--muted-foreground)]">
                     {worker.primary_role} - worker status: hired
                   </p>
+                  {findAssignment(booking, worker.id) ? (
+                    <p className="mt-2 rounded-md bg-white/80 px-2 py-1 text-xs font-bold text-emerald-900">
+                      {compensationSummary(findAssignment(booking, worker.id)!)}
+                    </p>
+                  ) : null}
                 </div>
               </div>
             </div>
@@ -949,7 +1100,9 @@ export function AdminBookingsClient({
           </CardHeader>
           <CardContent>
             {status === "pending" ? renderPendingWorkflow(activeBooking) : null}
-            {status === "confirmed" ? renderConfirmedWorkflow(activeBooking) : null}
+            {status === "confirmed" || status === "payment_pending"
+              ? renderConfirmedWorkflow(activeBooking)
+              : null}
             {status === "paid" ? renderPaidWorkflow(activeBooking) : null}
           </CardContent>
         </Card>

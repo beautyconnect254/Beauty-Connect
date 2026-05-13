@@ -6,7 +6,7 @@ import { Badge } from "@/components/ui/badge";
 import { buttonVariants } from "@/components/ui/button";
 import { Card, CardContent } from "@/components/ui/card";
 import type { Hire } from "@/lib/types";
-import { workerWhatsappHref } from "@/lib/booking-workflow";
+import { compensationSentence, workerWhatsappHref } from "@/lib/booking-workflow";
 import { cn } from "@/lib/utils";
 
 interface HireCardProps {
@@ -16,6 +16,7 @@ interface HireCardProps {
 export function HireCard({ hire }: HireCardProps) {
   const workerNames = hire.workers.map((worker) => worker.full_name).join(", ");
   const primaryWorker = hire.workers[0];
+  const primaryAssignment = hire.worker_assignments[0];
 
   return (
       <Card className="transition hover:border-emerald-400 hover:shadow-md">
@@ -50,7 +51,9 @@ export function HireCard({ hire }: HireCardProps) {
           </div>
 
           <div className="rounded-md bg-emerald-50 px-2 py-1.5 text-[11px] font-bold text-emerald-800">
-            Payment confirmed. Contacts unlocked.
+            {primaryAssignment
+              ? compensationSentence(primaryAssignment)
+              : "Payment confirmed. Contacts unlocked."}
           </div>
 
           <div className="grid grid-cols-2 gap-2">

@@ -7,10 +7,11 @@ import { Card, CardContent } from "@/components/ui/card";
 import type { Booking } from "@/lib/types";
 import {
   bookingStatusDescription,
+  compensationSentence,
   paymentStatusClass,
   paymentStatusLabel,
 } from "@/lib/booking-workflow";
-import { cn } from "@/lib/utils";
+import { cn, formatCurrency } from "@/lib/utils";
 
 interface BookingCardProps {
   booking: Booking;
@@ -19,6 +20,7 @@ interface BookingCardProps {
 
 export function BookingCard({ booking, interactive = true }: BookingCardProps) {
   const workerNames = booking.workers.map((worker) => worker.full_name).join(", ");
+  const primaryAssignment = booking.worker_assignments[0];
 
   const content = (
       <Card className="transition hover:border-emerald-400 hover:shadow-md">
@@ -63,6 +65,22 @@ export function BookingCard({ booking, interactive = true }: BookingCardProps) {
               {paymentStatusLabel(booking.payment_status)}
             </span>
           </div>
+
+          {booking.payment_instructions || primaryAssignment ? (
+            <div className="grid gap-1.5 rounded-md bg-[color:var(--muted)] px-2 py-1.5 text-[11px] font-bold text-[color:var(--foreground)]">
+              {primaryAssignment ? (
+                <span className="truncate">
+                  {compensationSentence(primaryAssignment)}
+                </span>
+              ) : null}
+              {booking.payment_instructions ? (
+                <span className="truncate text-[color:var(--muted-foreground)]">
+                  Platform fee:{" "}
+                  {formatCurrency(booking.payment_instructions.deposit_amount)}
+                </span>
+              ) : null}
+            </div>
+          ) : null}
 
           <p className="line-clamp-2 text-xs font-semibold leading-5 text-[color:var(--muted-foreground)]">
             {bookingStatusDescription(booking.status)}

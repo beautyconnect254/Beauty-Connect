@@ -1,6 +1,9 @@
 import type {
   Booking,
   BookingStatus,
+  BookingWorkerAssignmentRecord,
+  CompensationType,
+  HireWorkerAssignmentRecord,
   PaymentInstructions,
   PaymentStatus,
   Worker,
@@ -10,12 +13,21 @@ import { formatCurrency } from "@/lib/utils";
 export const ACTIVE_BOOKING_STATUSES = [
   "pending",
   "confirmed",
+  "payment_pending",
+  "paid",
+] as const satisfies BookingStatus[];
+
+export const LOCKING_BOOKING_STATUSES = [
+  "payment_pending",
   "paid",
 ] as const satisfies BookingStatus[];
 
 export const FUTURE_BOOKING_STATUSES = [
+  "expired",
   "cancelled",
 ] as const satisfies BookingStatus[];
+
+export const PAYMENT_LOCK_DURATION_MINUTES = 3;
 
 export const STAFFING_WORKFLOW_STEPS = [
   "Discover workers / build team",
@@ -23,8 +35,9 @@ export const STAFFING_WORKFLOW_STEPS = [
   "Pending review",
   "Availability review",
   "Confirmed",
-  "Payment instructions sent",
-  "Manual payment verification",
+  "Deposit payment starts",
+  "Workers locked for payment",
+  "Payment verification",
   "Hired",
   "Worker contacts unlocked",
 ] as const;
@@ -35,8 +48,12 @@ export function bookingStatusLabel(status: BookingStatus) {
       return "Pending";
     case "confirmed":
       return "Confirmed";
+    case "payment_pending":
+      return "Payment pending";
     case "paid":
       return "Paid";
+    case "expired":
+      return "Expired";
     case "cancelled":
       return "Cancelled";
     default:
@@ -49,9 +66,13 @@ export function bookingStatusDescription(status: BookingStatus) {
     case "pending":
       return "Beauty Connect is matching workers and manually verifying availability.";
     case "confirmed":
-      return "Workers are reserved. Deposit verification is pending.";
+      return "Workers are selected. They lock only when deposit payment starts.";
+    case "payment_pending":
+      return "Deposit payment is in progress. Workers are locked for a short payment window.";
     case "paid":
       return "Payment is verified. Worker contacts are unlocked in Hires.";
+    case "expired":
+      return "This booking has expired and is no longer active.";
     case "cancelled":
       return "This booking is no longer active.";
     default:
@@ -74,10 +95,14 @@ export function paymentStatusLabel(status: PaymentStatus) {
 
 export function bookingStatusClass(status: BookingStatus) {
   switch (status) {
+    case "payment_pending":
+      return "bg-purple-100 text-purple-800";
     case "confirmed":
       return "bg-emerald-100 text-emerald-800";
     case "paid":
       return "bg-teal-100 text-teal-800";
+    case "expired":
+      return "bg-slate-100 text-slate-700";
     case "cancelled":
       return "bg-rose-100 text-rose-800";
     default:
@@ -102,13 +127,23 @@ export function canUnlockWorkerContacts(status: BookingStatus | "hire") {
 }
 
 export function bookingRequiresPayment(booking: Pick<Booking, "status">) {
-  return booking.status === "confirmed";
+  return booking.status === "confirmed" || booking.status === "payment_pending";
 }
 
 export function bookingIsActive(status: BookingStatus) {
   return ACTIVE_BOOKING_STATUSES.includes(
     status as (typeof ACTIVE_BOOKING_STATUSES)[number],
   );
+}
+
+export function bookingLocksWorkers(status: BookingStatus) {
+  return LOCKING_BOOKING_STATUSES.includes(
+    status as (typeof LOCKING_BOOKING_STATUSES)[number],
+  );
+}
+
+export function bookingCanStartPayment(status: BookingStatus) {
+  return status === "confirmed";
 }
 
 export function defaultPaymentInstructions(
@@ -127,8 +162,8 @@ export function defaultPaymentInstructions(
     payment_reference: reference,
     notes:
       booking.type === "team"
-        ? "Pay the deposit after confirmation. Beauty Connect verifies manually before team contacts unlock."
-        : "Pay the deposit after confirmation. Beauty Connect verifies manually before worker contact unlocks.",
+        ? "Start deposit payment when ready. Beauty Connect locks the whole team for 3 minutes while payment begins."
+        : "Start deposit payment when ready. Beauty Connect locks the worker for 3 minutes while payment begins.",
   };
 }
 
@@ -143,4 +178,70 @@ export function workerContactPhone(worker: Worker) {
 export function workerWhatsappHref(worker: Worker) {
   const normalized = worker.whatsapp_number.replace(/[^\d]/g, "");
   return `https://wa.me/${normalized}`;
+}
+
+export function defaultCompensationType(worker: Pick<Worker, "primary_role">): CompensationType {
+  return ["Nail Technician", "Braider", "Makeup Artist"].includes(worker.primary_role)
+    ? "commission"
+    : "monthly";
+}
+
+export function defaultSalaryExpectation(worker: Pick<Worker, "salary_expectation">) {
+  return worker.salary_expectation > 0
+    ? `${formatCurrency(worker.salary_expectation)}/month`
+    : "";
+}
+
+export function defaultCommissionPercentage(
+  worker: Pick<Worker, "primary_role">,
+) {
+  return defaultCompensationType(worker) === "commission" ? 50 : null;
+}
+
+export function normalizeCommissionPercentage(value: unknown) {
+  const percentage = Number(value);
+
+  if (!Number.isFinite(percentage)) {
+    return null;
+  }
+
+  return Math.min(Math.max(Math.round(percentage), 0), 100);
+}
+
+export function compensationSummary(
+  assignment: Pick<
+    BookingWorkerAssignmentRecord | HireWorkerAssignmentRecord,
+    "compensation_type" | "salary_expectation" | "commission_percentage"
+  >,
+) {
+  if (assignment.compensation_type === "commission") {
+    const percentage = normalizeCommissionPercentage(
+      assignment.commission_percentage,
+    );
+
+    return percentage === null
+      ? "Commission: to be confirmed"
+      : `Commission: ${percentage}%`;
+  }
+
+  return assignment.salary_expectation || "Salary to be confirmed";
+}
+
+export function compensationSentence(
+  assignment: Pick<
+    BookingWorkerAssignmentRecord | HireWorkerAssignmentRecord,
+    "compensation_type" | "salary_expectation" | "commission_percentage"
+  >,
+) {
+  if (assignment.compensation_type === "commission") {
+    const percentage = normalizeCommissionPercentage(
+      assignment.commission_percentage,
+    );
+
+    return percentage === null
+      ? "Commission to be confirmed"
+      : `${percentage}% commission`;
+  }
+
+  return assignment.salary_expectation || "Salary to be confirmed";
 }

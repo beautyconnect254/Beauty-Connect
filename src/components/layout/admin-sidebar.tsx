@@ -59,6 +59,16 @@ const navGroups = [
         label: "Confirmed Single",
         icon: CalendarCheck2,
       },
+      {
+        href: "/admin/bookings/payment-pending/team",
+        label: "Payment Team",
+        icon: CalendarCheck2,
+      },
+      {
+        href: "/admin/bookings/payment-pending/single",
+        label: "Payment Single",
+        icon: CalendarCheck2,
+      },
       { href: "/admin/bookings/paid/team", label: "Paid Team", icon: BriefcaseBusiness },
       {
         href: "/admin/bookings/paid/single",

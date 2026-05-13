@@ -28,6 +28,9 @@ export default async function AdminDashboardPage() {
   const confirmedBookings = bookings.filter(
     (booking) => booking.status === "confirmed",
   );
+  const paymentPendingBookings = bookings.filter(
+    (booking) => booking.status === "payment_pending",
+  );
   const availableWorkers = workers.filter(
     (worker) =>
       worker.availability_status === "available" &&
@@ -77,6 +80,16 @@ export default async function AdminDashboardPage() {
                 label: "Confirmed single",
                 href: "/admin/bookings/confirmed/single",
                 count: confirmedBookings.filter((booking) => booking.type === "worker").length,
+              },
+              {
+                label: "Payment pending team",
+                href: "/admin/bookings/payment-pending/team",
+                count: paymentPendingBookings.filter((booking) => booking.type === "team").length,
+              },
+              {
+                label: "Payment pending single",
+                href: "/admin/bookings/payment-pending/single",
+                count: paymentPendingBookings.filter((booking) => booking.type === "worker").length,
               },
             ].map((item) => (
               <Link

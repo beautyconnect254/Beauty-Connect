@@ -170,7 +170,9 @@ begin
     create type public.booking_status as enum (
       'pending',
       'confirmed',
+      'payment_pending',
       'paid',
+      'expired',
       'cancelled'
     );
   end if;
@@ -276,7 +278,9 @@ alter type public.staffing_assignment_status add value if not exists 'released';
 
 alter type public.booking_status add value if not exists 'pending';
 alter type public.booking_status add value if not exists 'confirmed';
+alter type public.booking_status add value if not exists 'payment_pending';
 alter type public.booking_status add value if not exists 'paid';
+alter type public.booking_status add value if not exists 'expired';
 alter type public.booking_status add value if not exists 'cancelled';
 
 alter type public.admin_activity_type add value if not exists 'booking_confirmed';
@@ -479,6 +483,10 @@ create table if not exists public.bookings (
   notes text not null default '',
   request_details jsonb not null default '{}'::jsonb,
   payment_instructions jsonb,
+  payment_lock_id text,
+  payment_started_at timestamptz,
+  payment_lock_expires_at timestamptz,
+  payment_completed_at timestamptz,
   updated_at timestamptz not null default now()
 );
 
@@ -491,6 +499,18 @@ add column if not exists tracking_token text;
 alter table public.bookings
 add column if not exists request_details jsonb not null default '{}'::jsonb;
 
+alter table public.bookings
+add column if not exists payment_lock_id text;
+
+alter table public.bookings
+add column if not exists payment_started_at timestamptz;
+
+alter table public.bookings
+add column if not exists payment_lock_expires_at timestamptz;
+
+alter table public.bookings
+add column if not exists payment_completed_at timestamptz;
+
 update public.bookings
 set tracking_token = replace(gen_random_uuid()::text, '-', '')
 where tracking_token is null or tracking_token = '';
@@ -501,9 +521,49 @@ alter column tracking_token set not null;
 create table if not exists public.booking_workers (
   booking_id text not null references public.bookings(id) on delete cascade,
   worker_id text not null references public.workers(id) on delete restrict,
+  compensation_type text not null default 'monthly',
+  salary_expectation text not null default '',
+  commission_percentage numeric(5,2),
   created_at timestamptz not null default now(),
   primary key (booking_id, worker_id)
 );
+
+alter table public.booking_workers
+add column if not exists compensation_type text not null default 'monthly';
+
+alter table public.booking_workers
+add column if not exists salary_expectation text not null default '';
+
+alter table public.booking_workers
+add column if not exists commission_percentage numeric(5,2);
+
+do $$
+begin
+  if not exists (
+    select 1
+    from pg_constraint
+    where conname = 'booking_workers_compensation_type_check'
+      and conrelid = 'public.booking_workers'::regclass
+  ) then
+    alter table public.booking_workers
+    add constraint booking_workers_compensation_type_check
+    check (compensation_type in ('monthly', 'commission'));
+  end if;
+
+  if not exists (
+    select 1
+    from pg_constraint
+    where conname = 'booking_workers_commission_percentage_check'
+      and conrelid = 'public.booking_workers'::regclass
+  ) then
+    alter table public.booking_workers
+    add constraint booking_workers_commission_percentage_check
+    check (
+      commission_percentage is null or
+      (commission_percentage >= 0 and commission_percentage <= 100)
+    );
+  end if;
+end $$;
 
 create table if not exists public.payment_verifications (
   id text primary key,
@@ -516,6 +576,128 @@ create table if not exists public.payment_verifications (
   created_at timestamptz not null default now(),
   updated_at timestamptz not null default now()
 );
+
+create table if not exists public.mpesa_payments (
+  id text primary key,
+  booking_id text not null references public.bookings(id) on delete cascade,
+  payment_lock_id text not null,
+  merchant_request_id text,
+  checkout_request_id text unique,
+  phone_number text not null,
+  amount integer not null check (amount > 0),
+  account_reference text not null,
+  transaction_desc text not null,
+  status text not null default 'initiated' check (
+    status in (
+      'initiated',
+      'pending',
+      'succeeded',
+      'failed',
+      'init_failed',
+      'callback_error'
+    )
+  ),
+  result_code integer,
+  result_description text,
+  mpesa_receipt_number text unique,
+  transaction_date text,
+  request_payload jsonb not null default '{}'::jsonb,
+  response_payload jsonb,
+  callback_payload jsonb,
+  created_at timestamptz not null default now(),
+  updated_at timestamptz not null default now()
+);
+
+alter table public.mpesa_payments
+add column if not exists payment_lock_id text not null default '';
+
+alter table public.mpesa_payments
+add column if not exists merchant_request_id text;
+
+alter table public.mpesa_payments
+add column if not exists checkout_request_id text;
+
+alter table public.mpesa_payments
+add column if not exists phone_number text not null default '';
+
+alter table public.mpesa_payments
+add column if not exists amount integer not null default 1;
+
+alter table public.mpesa_payments
+add column if not exists account_reference text not null default '';
+
+alter table public.mpesa_payments
+add column if not exists transaction_desc text not null default '';
+
+alter table public.mpesa_payments
+add column if not exists status text not null default 'initiated';
+
+alter table public.mpesa_payments
+add column if not exists result_code integer;
+
+alter table public.mpesa_payments
+add column if not exists result_description text;
+
+alter table public.mpesa_payments
+add column if not exists mpesa_receipt_number text;
+
+alter table public.mpesa_payments
+add column if not exists transaction_date text;
+
+alter table public.mpesa_payments
+add column if not exists request_payload jsonb not null default '{}'::jsonb;
+
+alter table public.mpesa_payments
+add column if not exists response_payload jsonb;
+
+alter table public.mpesa_payments
+add column if not exists callback_payload jsonb;
+
+do $$
+begin
+  if not exists (
+    select 1
+    from pg_constraint
+    where conname = 'mpesa_payments_amount_check'
+      and conrelid = 'public.mpesa_payments'::regclass
+  ) then
+    alter table public.mpesa_payments
+    add constraint mpesa_payments_amount_check
+    check (amount > 0);
+  end if;
+
+  if not exists (
+    select 1
+    from pg_constraint
+    where conname = 'mpesa_payments_status_check'
+      and conrelid = 'public.mpesa_payments'::regclass
+  ) then
+    alter table public.mpesa_payments
+    add constraint mpesa_payments_status_check
+    check (
+      status in (
+        'initiated',
+        'pending',
+        'succeeded',
+        'failed',
+        'init_failed',
+        'callback_error'
+      )
+    );
+  end if;
+end $$;
+
+create unique index if not exists mpesa_payments_checkout_request_unique
+on public.mpesa_payments (checkout_request_id)
+where checkout_request_id is not null;
+
+create unique index if not exists mpesa_payments_receipt_unique
+on public.mpesa_payments (mpesa_receipt_number)
+where mpesa_receipt_number is not null;
+
+create unique index if not exists mpesa_payments_one_success_per_booking
+on public.mpesa_payments (booking_id)
+where status = 'succeeded';
 
 create table if not exists public.hires (
   id text primary key,
@@ -559,9 +741,49 @@ $$;
 create table if not exists public.hire_workers (
   hire_id text not null references public.hires(id) on delete cascade,
   worker_id text not null references public.workers(id) on delete restrict,
+  compensation_type text not null default 'monthly',
+  salary_expectation text not null default '',
+  commission_percentage numeric(5,2),
   created_at timestamptz not null default now(),
   primary key (hire_id, worker_id)
 );
+
+alter table public.hire_workers
+add column if not exists compensation_type text not null default 'monthly';
+
+alter table public.hire_workers
+add column if not exists salary_expectation text not null default '';
+
+alter table public.hire_workers
+add column if not exists commission_percentage numeric(5,2);
+
+do $$
+begin
+  if not exists (
+    select 1
+    from pg_constraint
+    where conname = 'hire_workers_compensation_type_check'
+      and conrelid = 'public.hire_workers'::regclass
+  ) then
+    alter table public.hire_workers
+    add constraint hire_workers_compensation_type_check
+    check (compensation_type in ('monthly', 'commission'));
+  end if;
+
+  if not exists (
+    select 1
+    from pg_constraint
+    where conname = 'hire_workers_commission_percentage_check'
+      and conrelid = 'public.hire_workers'::regclass
+  ) then
+    alter table public.hire_workers
+    add constraint hire_workers_commission_percentage_check
+    check (
+      commission_percentage is null or
+      (commission_percentage >= 0 and commission_percentage <= 100)
+    );
+  end if;
+end $$;
 
 create table if not exists public.verification_documents (
   id text primary key,
@@ -647,10 +869,14 @@ create index if not exists bookings_status_idx on public.bookings (status);
 create index if not exists bookings_user_idx on public.bookings (user_id);
 create unique index if not exists bookings_tracking_token_idx on public.bookings (tracking_token);
 create index if not exists bookings_payment_status_idx on public.bookings (payment_status);
+create index if not exists bookings_payment_lock_expires_idx on public.bookings (payment_lock_expires_at);
 create index if not exists bookings_team_request_idx on public.bookings (team_request_id);
 create index if not exists booking_workers_worker_idx on public.booking_workers (worker_id);
 create index if not exists payment_verifications_booking_idx on public.payment_verifications (booking_id);
 create index if not exists payment_verifications_status_idx on public.payment_verifications (status);
+create index if not exists mpesa_payments_booking_idx on public.mpesa_payments (booking_id);
+create index if not exists mpesa_payments_status_idx on public.mpesa_payments (status);
+create index if not exists mpesa_payments_lock_idx on public.mpesa_payments (payment_lock_id);
 create index if not exists hires_booking_idx on public.hires (booking_id);
 create index if not exists hires_user_idx on public.hires (user_id);
 create index if not exists hires_status_idx on public.hires (status);
@@ -708,6 +934,7 @@ begin
   if not found or target_booking.status not in (
     'pending'::public.booking_status,
     'confirmed'::public.booking_status,
+    'payment_pending'::public.booking_status,
     'paid'::public.booking_status
   ) then
     return new;
@@ -729,6 +956,7 @@ begin
         and existing_booking.status in (
           'pending'::public.booking_status,
           'confirmed'::public.booking_status,
+          'payment_pending'::public.booking_status,
           'paid'::public.booking_status
         )
     )
@@ -746,9 +974,12 @@ begin
   where existing_worker.worker_id = new.worker_id
     and existing_worker.booking_id <> new.booking_id
     and existing_booking.status in (
-      'pending'::public.booking_status,
-      'confirmed'::public.booking_status,
+      'payment_pending'::public.booking_status,
       'paid'::public.booking_status
+    )
+    and (
+      existing_booking.status = 'paid'::public.booking_status or
+      existing_booking.payment_lock_expires_at > now()
     );
 
   if active_count >= capacity_limit then
@@ -759,11 +990,741 @@ begin
 end;
 $$;
 
+create or replace function public.expire_stale_payment_locks()
+returns integer
+language plpgsql
+security definer
+set search_path = public
+as $$
+declare
+  expired_booking record;
+  expired_count integer := 0;
+begin
+  for expired_booking in
+    select id
+    from public.bookings
+    where status = 'payment_pending'::public.booking_status
+      and payment_lock_expires_at is not null
+      and payment_lock_expires_at <= now()
+  loop
+    perform pg_advisory_xact_lock(hashtext(expired_booking.id));
+
+    update public.workers worker
+    set availability_status = 'available'::public.availability_status
+    where worker.id in (
+      select booking_worker.worker_id
+      from public.booking_workers booking_worker
+      where booking_worker.booking_id = expired_booking.id
+    )
+      and worker.availability_status = 'reserved'::public.availability_status
+      and not exists (
+        select 1
+        from public.booking_workers other_booking_worker
+        join public.bookings other_booking
+          on other_booking.id = other_booking_worker.booking_id
+        where other_booking_worker.worker_id = worker.id
+          and other_booking_worker.booking_id <> expired_booking.id
+          and (
+            other_booking.status = 'paid'::public.booking_status or
+            (
+              other_booking.status = 'payment_pending'::public.booking_status
+              and other_booking.payment_lock_expires_at > now()
+            )
+          )
+      );
+
+    update public.bookings
+    set
+      status = 'confirmed'::public.booking_status,
+      payment_lock_id = null,
+      payment_started_at = null,
+      payment_lock_expires_at = null,
+      updated_at = now()
+    where id = expired_booking.id
+      and status = 'payment_pending'::public.booking_status
+      and payment_lock_expires_at <= now();
+
+    if found then
+      expired_count := expired_count + 1;
+    end if;
+  end loop;
+
+  return expired_count;
+end;
+$$;
+
+create or replace function public.release_booking_payment_lock(
+  target_booking_id text,
+  target_lock_id text default null,
+  target_reason text default null
+)
+returns jsonb
+language plpgsql
+security definer
+set search_path = public
+as $$
+declare
+  target_booking public.bookings%rowtype;
+begin
+  perform pg_advisory_xact_lock(hashtext(target_booking_id));
+
+  select *
+  into target_booking
+  from public.bookings
+  where id = target_booking_id
+  for update;
+
+  if not found then
+    return jsonb_build_object('released', false, 'reason', 'booking_not_found');
+  end if;
+
+  if target_booking.status <> 'payment_pending'::public.booking_status then
+    return jsonb_build_object(
+      'released', false,
+      'booking_id', target_booking.id,
+      'status', target_booking.status,
+      'reason', 'not_payment_pending'
+    );
+  end if;
+
+  if target_lock_id is not null
+    and target_booking.payment_lock_id is distinct from target_lock_id
+  then
+    return jsonb_build_object(
+      'released', false,
+      'booking_id', target_booking.id,
+      'status', target_booking.status,
+      'reason', 'lock_mismatch'
+    );
+  end if;
+
+  update public.workers worker
+  set availability_status = 'available'::public.availability_status
+  where worker.id in (
+    select booking_worker.worker_id
+    from public.booking_workers booking_worker
+    where booking_worker.booking_id = target_booking.id
+  )
+    and worker.availability_status = 'reserved'::public.availability_status
+    and not exists (
+      select 1
+      from public.booking_workers other_booking_worker
+      join public.bookings other_booking
+        on other_booking.id = other_booking_worker.booking_id
+      where other_booking_worker.worker_id = worker.id
+        and other_booking_worker.booking_id <> target_booking.id
+        and (
+          other_booking.status = 'paid'::public.booking_status or
+          (
+            other_booking.status = 'payment_pending'::public.booking_status
+            and other_booking.payment_lock_expires_at > now()
+          )
+        )
+    );
+
+  update public.bookings
+  set
+    status = 'confirmed'::public.booking_status,
+    payment_status = 'deposit_due'::public.payment_status,
+    payment_lock_id = null,
+    payment_started_at = null,
+    payment_lock_expires_at = null,
+    updated_at = now()
+  where id = target_booking.id;
+
+  return jsonb_build_object(
+    'released', true,
+    'booking_id', target_booking.id,
+    'status', 'confirmed',
+    'reason', target_reason
+  );
+end;
+$$;
+
+create or replace function public.process_mpesa_stk_callback(
+  target_checkout_request_id text,
+  target_result_code integer,
+  target_result_description text,
+  target_mpesa_receipt_number text,
+  target_transaction_date text,
+  target_amount numeric,
+  target_callback_payload jsonb
+)
+returns jsonb
+language plpgsql
+security definer
+set search_path = public
+as $$
+declare
+  target_payment public.mpesa_payments%rowtype;
+  target_booking public.bookings%rowtype;
+  target_hire_id text;
+  existing_receipt_payment_id text;
+  amount_is_valid boolean := true;
+begin
+  if target_checkout_request_id is null or trim(target_checkout_request_id) = '' then
+    raise exception 'CheckoutRequestID is required.';
+  end if;
+
+  perform pg_advisory_xact_lock(hashtext(target_checkout_request_id));
+
+  select *
+  into target_payment
+  from public.mpesa_payments
+  where checkout_request_id = target_checkout_request_id
+  for update;
+
+  if not found then
+    raise exception 'M-Pesa payment not found.';
+  end if;
+
+  if target_payment.status = 'succeeded' then
+    return jsonb_build_object(
+      'processed', false,
+      'already_processed', true,
+      'status', target_payment.status,
+      'booking_id', target_payment.booking_id
+    );
+  end if;
+
+  perform pg_advisory_xact_lock(hashtext(target_payment.booking_id));
+
+  if target_result_code is distinct from 0 then
+    update public.mpesa_payments
+    set
+      status = 'failed',
+      result_code = target_result_code,
+      result_description = target_result_description,
+      callback_payload = target_callback_payload,
+      updated_at = now()
+    where id = target_payment.id;
+
+    if exists (
+      select 1
+      from public.bookings booking
+      where booking.id = target_payment.booking_id
+        and booking.status = 'paid'::public.booking_status
+    ) or exists (
+      select 1
+      from public.mpesa_payments other_payment
+      where other_payment.booking_id = target_payment.booking_id
+        and other_payment.id <> target_payment.id
+        and other_payment.status = 'succeeded'
+    ) then
+      return jsonb_build_object(
+        'processed', true,
+        'status', 'failed',
+        'booking_id', target_payment.booking_id,
+        'ignored_after_paid', true,
+        'result_code', target_result_code
+      );
+    end if;
+
+    insert into public.payment_verifications (
+      id,
+      booking_id,
+      status,
+      submitted_reference,
+      verified_by,
+      verified_at,
+      notes
+    )
+    values (
+      'verification-' || target_payment.booking_id,
+      target_payment.booking_id,
+      'rejected'::public.payment_verification_status,
+      target_payment.checkout_request_id,
+      'Daraja',
+      now(),
+      coalesce(target_result_description, 'M-Pesa payment failed or expired.')
+    )
+    on conflict (id) do update
+    set
+      status = excluded.status,
+      submitted_reference = excluded.submitted_reference,
+      verified_by = excluded.verified_by,
+      verified_at = excluded.verified_at,
+      notes = excluded.notes,
+      updated_at = now();
+
+    perform public.release_booking_payment_lock(
+      target_payment.booking_id,
+      target_payment.payment_lock_id,
+      target_result_description
+    );
+
+    return jsonb_build_object(
+      'processed', true,
+      'status', 'failed',
+      'booking_id', target_payment.booking_id,
+      'result_code', target_result_code
+    );
+  end if;
+
+  if target_mpesa_receipt_number is null or trim(target_mpesa_receipt_number) = '' then
+    update public.mpesa_payments
+    set
+      status = 'callback_error',
+      result_code = target_result_code,
+      result_description = coalesce(target_result_description, 'Successful callback missing M-Pesa receipt.'),
+      callback_payload = target_callback_payload,
+      updated_at = now()
+    where id = target_payment.id;
+
+    perform public.release_booking_payment_lock(
+      target_payment.booking_id,
+      target_payment.payment_lock_id,
+      'Successful M-Pesa callback missing receipt.'
+    );
+
+    return jsonb_build_object(
+      'processed', false,
+      'status', 'callback_error',
+      'booking_id', target_payment.booking_id,
+      'reason', 'missing_receipt'
+    );
+  end if;
+
+  if target_amount is not null and target_amount < target_payment.amount then
+    amount_is_valid := false;
+  end if;
+
+  if not amount_is_valid then
+    update public.mpesa_payments
+    set
+      status = 'callback_error',
+      result_code = target_result_code,
+      result_description = 'M-Pesa amount is lower than expected platform fee.',
+      callback_payload = target_callback_payload,
+      updated_at = now()
+    where id = target_payment.id;
+
+    if exists (
+      select 1
+      from public.bookings booking
+      where booking.id = target_payment.booking_id
+        and booking.status = 'paid'::public.booking_status
+    ) or exists (
+      select 1
+      from public.mpesa_payments other_payment
+      where other_payment.booking_id = target_payment.booking_id
+        and other_payment.id <> target_payment.id
+        and other_payment.status = 'succeeded'
+    ) then
+      return jsonb_build_object(
+        'processed', false,
+        'status', 'callback_error',
+        'booking_id', target_payment.booking_id,
+        'reason', 'amount_mismatch_after_paid'
+      );
+    end if;
+
+    insert into public.payment_verifications (
+      id,
+      booking_id,
+      status,
+      submitted_reference,
+      verified_by,
+      verified_at,
+      notes
+    )
+    values (
+      'verification-' || target_payment.booking_id,
+      target_payment.booking_id,
+      'rejected'::public.payment_verification_status,
+      target_mpesa_receipt_number,
+      'Daraja',
+      now(),
+      'M-Pesa amount is lower than expected platform fee.'
+    )
+    on conflict (id) do update
+    set
+      status = excluded.status,
+      submitted_reference = excluded.submitted_reference,
+      verified_by = excluded.verified_by,
+      verified_at = excluded.verified_at,
+      notes = excluded.notes,
+      updated_at = now();
+
+    perform public.release_booking_payment_lock(
+      target_payment.booking_id,
+      target_payment.payment_lock_id,
+      'M-Pesa amount is lower than expected platform fee.'
+    );
+
+    return jsonb_build_object(
+      'processed', false,
+      'status', 'callback_error',
+      'booking_id', target_payment.booking_id,
+      'reason', 'amount_mismatch'
+    );
+  end if;
+
+  select id
+  into existing_receipt_payment_id
+  from public.mpesa_payments
+  where mpesa_receipt_number = target_mpesa_receipt_number
+    and id <> target_payment.id
+    and status = 'succeeded'
+  limit 1;
+
+  if existing_receipt_payment_id is not null then
+    update public.mpesa_payments
+    set
+      status = 'callback_error',
+      result_code = target_result_code,
+      result_description = 'Duplicate M-Pesa receipt received.',
+      callback_payload = target_callback_payload,
+      updated_at = now()
+    where id = target_payment.id;
+
+    perform public.release_booking_payment_lock(
+      target_payment.booking_id,
+      target_payment.payment_lock_id,
+      'Duplicate M-Pesa receipt received.'
+    );
+
+    return jsonb_build_object(
+      'processed', false,
+      'status', 'callback_error',
+      'booking_id', target_payment.booking_id,
+      'reason', 'duplicate_receipt'
+    );
+  end if;
+
+  select *
+  into target_booking
+  from public.bookings
+  where id = target_payment.booking_id
+  for update;
+
+  if not found then
+    raise exception 'Booking not found for payment.';
+  end if;
+
+  select id
+  into existing_receipt_payment_id
+  from public.mpesa_payments
+  where booking_id = target_payment.booking_id
+    and id <> target_payment.id
+    and status = 'succeeded'
+  limit 1;
+
+  if existing_receipt_payment_id is not null
+    or target_booking.status = 'paid'::public.booking_status
+  then
+    update public.mpesa_payments
+    set
+      status = 'callback_error',
+      result_code = target_result_code,
+      result_description = 'Booking already has a successful M-Pesa payment.',
+      mpesa_receipt_number = target_mpesa_receipt_number,
+      transaction_date = target_transaction_date,
+      callback_payload = target_callback_payload,
+      updated_at = now()
+    where id = target_payment.id;
+
+    return jsonb_build_object(
+      'processed', false,
+      'status', 'callback_error',
+      'booking_id', target_payment.booking_id,
+      'reason', 'booking_already_paid'
+    );
+  end if;
+
+  update public.mpesa_payments
+  set
+    status = 'succeeded',
+    result_code = target_result_code,
+    result_description = target_result_description,
+    mpesa_receipt_number = target_mpesa_receipt_number,
+    transaction_date = target_transaction_date,
+    callback_payload = target_callback_payload,
+    updated_at = now()
+  where id = target_payment.id;
+
+  update public.bookings
+  set
+    status = 'paid'::public.booking_status,
+    payment_status = 'deposit_paid'::public.payment_status,
+    payment_lock_id = null,
+    payment_started_at = null,
+    payment_lock_expires_at = null,
+    payment_completed_at = now(),
+    updated_at = now()
+  where id = target_booking.id;
+
+  update public.workers
+  set
+    availability_status = 'hired'::public.availability_status,
+    listed_publicly = false
+  where id in (
+    select booking_worker.worker_id
+    from public.booking_workers booking_worker
+    where booking_worker.booking_id = target_booking.id
+  );
+
+  target_hire_id := 'hire-' || target_booking.id;
+
+  insert into public.hires (
+    id,
+    user_id,
+    booking_id,
+    title,
+    status,
+    payment_status,
+    hire_date,
+    payment_reference
+  )
+  values (
+    target_hire_id,
+    target_booking.user_id,
+    target_booking.id,
+    target_booking.title || ' hire',
+    'active'::public.hire_status,
+    'paid'::public.payment_status,
+    target_booking.booking_date,
+    target_mpesa_receipt_number
+  )
+  on conflict (id) do update
+  set
+    user_id = excluded.user_id,
+    title = excluded.title,
+    status = excluded.status,
+    payment_status = excluded.payment_status,
+    hire_date = excluded.hire_date,
+    payment_reference = excluded.payment_reference,
+    updated_at = now();
+
+  insert into public.hire_workers (
+    hire_id,
+    worker_id,
+    compensation_type,
+    salary_expectation,
+    commission_percentage
+  )
+  select
+    target_hire_id,
+    booking_worker.worker_id,
+    booking_worker.compensation_type,
+    booking_worker.salary_expectation,
+    booking_worker.commission_percentage
+  from public.booking_workers booking_worker
+  where booking_worker.booking_id = target_booking.id
+  on conflict (hire_id, worker_id) do update
+  set
+    compensation_type = excluded.compensation_type,
+    salary_expectation = excluded.salary_expectation,
+    commission_percentage = excluded.commission_percentage;
+
+  insert into public.payment_verifications (
+    id,
+    booking_id,
+    status,
+    submitted_reference,
+    verified_by,
+    verified_at,
+    notes
+  )
+  values (
+    'verification-' || target_booking.id,
+    target_booking.id,
+    'verified'::public.payment_verification_status,
+    target_mpesa_receipt_number,
+    'Daraja',
+    now(),
+    coalesce(target_result_description, 'M-Pesa payment confirmed.')
+  )
+  on conflict (id) do update
+  set
+    status = excluded.status,
+    submitted_reference = excluded.submitted_reference,
+    verified_by = excluded.verified_by,
+    verified_at = excluded.verified_at,
+    notes = excluded.notes,
+    updated_at = now();
+
+  insert into public.admin_activity_logs (
+    id,
+    type,
+    actor,
+    message,
+    booking_id,
+    worker_id
+  )
+  values (
+    'activity-' || gen_random_uuid()::text,
+    'payment_confirmed'::public.admin_activity_type,
+    'Daraja',
+    target_booking.title || ' paid via M-Pesa receipt ' || target_mpesa_receipt_number || '.',
+    target_booking.id,
+    null
+  );
+
+  return jsonb_build_object(
+    'processed', true,
+    'status', 'succeeded',
+    'booking_id', target_booking.id,
+    'hire_id', target_hire_id,
+    'mpesa_receipt_number', target_mpesa_receipt_number
+  );
+end;
+$$;
+
+create or replace function public.start_booking_payment_lock(
+  target_booking_id text,
+  target_user_id uuid,
+  target_lock_id text,
+  target_expires_at timestamptz
+)
+returns jsonb
+language plpgsql
+security definer
+set search_path = public
+as $$
+declare
+  target_booking public.bookings%rowtype;
+  target_worker_ids text[];
+  target_worker_id text;
+  unavailable_count integer;
+  blocking_count integer;
+  locked_at timestamptz := now();
+begin
+  perform public.expire_stale_payment_locks();
+  perform pg_advisory_xact_lock(hashtext(target_booking_id));
+
+  select *
+  into target_booking
+  from public.bookings
+  where id = target_booking_id
+  for update;
+
+  if not found then
+    raise exception 'Booking not found.';
+  end if;
+
+  if target_user_id is not null and target_booking.user_id is distinct from target_user_id then
+    raise exception 'Booking not found.';
+  end if;
+
+  if target_booking.status = 'payment_pending'::public.booking_status
+    and target_booking.payment_lock_expires_at > now()
+  then
+    return jsonb_build_object(
+      'booking_id', target_booking.id,
+      'status', target_booking.status,
+      'lock_id', target_booking.payment_lock_id,
+      'expires_at', target_booking.payment_lock_expires_at,
+      'worker_count', (
+        select count(*)
+        from public.booking_workers
+        where booking_id = target_booking.id
+      )
+    );
+  end if;
+
+  if target_booking.status <> 'confirmed'::public.booking_status then
+    raise exception 'Booking must be confirmed before payment starts.';
+  end if;
+
+  select array_agg(worker_id order by worker_id)
+  into target_worker_ids
+  from public.booking_workers
+  where booking_id = target_booking.id;
+
+  if target_worker_ids is null or array_length(target_worker_ids, 1) = 0 then
+    raise exception 'No workers are assigned to this booking.';
+  end if;
+
+  foreach target_worker_id in array target_worker_ids
+  loop
+    perform pg_advisory_xact_lock(hashtext(target_worker_id));
+  end loop;
+
+  select count(*)
+  into blocking_count
+  from public.booking_workers booking_worker
+  join public.bookings booking
+    on booking.id = booking_worker.booking_id
+  where booking_worker.worker_id = any(target_worker_ids)
+    and booking_worker.booking_id <> target_booking.id
+    and (
+      booking.status = 'paid'::public.booking_status or
+      (
+        booking.status = 'payment_pending'::public.booking_status
+        and booking.payment_lock_expires_at > now()
+      )
+    );
+
+  if blocking_count > 0 then
+    raise exception 'One or more workers are no longer available.';
+  end if;
+
+  select count(*)
+  into unavailable_count
+  from public.workers
+  where id = any(target_worker_ids)
+    and availability_status <> 'available'::public.availability_status;
+
+  if unavailable_count > 0 then
+    raise exception 'One or more workers are no longer available.';
+  end if;
+
+  update public.bookings
+  set
+    status = 'payment_pending'::public.booking_status,
+    payment_status = 'deposit_due'::public.payment_status,
+    payment_lock_id = target_lock_id,
+    payment_started_at = locked_at,
+    payment_lock_expires_at = target_expires_at,
+    updated_at = now()
+  where id = target_booking.id;
+
+  update public.workers
+  set availability_status = 'reserved'::public.availability_status
+  where id = any(target_worker_ids);
+
+  return jsonb_build_object(
+    'booking_id', target_booking.id,
+    'status', 'payment_pending',
+    'lock_id', target_lock_id,
+    'expires_at', target_expires_at,
+    'worker_count', array_length(target_worker_ids, 1)
+  );
+end;
+$$;
+
 drop trigger if exists booking_workers_enforce_rules on public.booking_workers;
 create trigger booking_workers_enforce_rules
 before insert or update of booking_id, worker_id on public.booking_workers
 for each row
 execute function public.enforce_booking_worker_rules();
+
+update public.workers worker
+set availability_status = 'available'::public.availability_status
+where worker.availability_status = 'reserved'::public.availability_status
+  and exists (
+    select 1
+    from public.booking_workers booking_worker
+    join public.bookings booking
+      on booking.id = booking_worker.booking_id
+    where booking_worker.worker_id = worker.id
+      and booking.status::text = 'confirmed'
+  )
+  and not exists (
+    select 1
+    from public.booking_workers booking_worker
+    join public.bookings booking
+      on booking.id = booking_worker.booking_id
+    where booking_worker.worker_id = worker.id
+      and (
+        booking.status::text = 'paid' or
+        (
+          booking.status::text = 'payment_pending'
+          and booking.payment_lock_expires_at > now()
+        )
+      )
+  );
 
 drop trigger if exists workers_set_updated_at on public.workers;
 create trigger workers_set_updated_at
@@ -798,6 +1759,12 @@ execute function public.set_updated_at();
 drop trigger if exists payment_verifications_set_updated_at on public.payment_verifications;
 create trigger payment_verifications_set_updated_at
 before update on public.payment_verifications
+for each row
+execute function public.set_updated_at();
+
+drop trigger if exists mpesa_payments_set_updated_at on public.mpesa_payments;
+create trigger mpesa_payments_set_updated_at
+before update on public.mpesa_payments
 for each row
 execute function public.set_updated_at();
 

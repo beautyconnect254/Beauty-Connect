@@ -156,7 +156,7 @@ export const workers: WorkerRecord[] = [
     location: "Nairobi",
     years_of_experience: 8,
     bio: "Amara blends precision coloring with a calm chairside experience and strong repeat-booking discipline.",
-    availability_status: "reserved",
+    availability_status: "available",
     verification_status: "verified",
     salary_expectation: 90000,
     work_type: "full-time",
@@ -177,7 +177,7 @@ export const workers: WorkerRecord[] = [
     location: "Nairobi",
     years_of_experience: 6,
     bio: "Baraka is known for clean fades, sharp beard architecture, and efficient grooming-floor workflow.",
-    availability_status: "reserved",
+    availability_status: "available",
     verification_status: "verified",
     salary_expectation: 70000,
     work_type: "contract",
@@ -366,7 +366,7 @@ export const workers: WorkerRecord[] = [
     location: "Nairobi",
     years_of_experience: 8,
     bio: "Nadia is strong in manicure work where detail, sanitation, and neat design matter.",
-    availability_status: "reserved",
+    availability_status: "available",
     verification_status: "verified",
     salary_expectation: 72000,
     work_type: "full-time",
@@ -654,6 +654,22 @@ export const bookings: BookingRecord[] = [
     booking_date: "2026-05-28",
     submitted_at: "2026-05-08T10:15:00.000Z",
     worker_ids: ["amara-njeri", "nadia-aziz"],
+    worker_assignments: [
+      {
+        booking_id: "booking-luna-team",
+        worker_id: "amara-njeri",
+        compensation_type: "monthly",
+        salary_expectation: "KSh 90,000/month",
+        commission_percentage: null,
+      },
+      {
+        booking_id: "booking-luna-team",
+        worker_id: "nadia-aziz",
+        compensation_type: "commission",
+        salary_expectation: "",
+        commission_percentage: 50,
+      },
+    ],
     team_request_id: "req-luna-house",
     notes: "Two workers confirmed. Deposit is needed before start date.",
     payment_instructions: defaultPaymentInstructions({
@@ -679,6 +695,22 @@ export const bookings: BookingRecord[] = [
     booking_date: "2026-06-05",
     submitted_at: "2026-05-09T08:30:00.000Z",
     worker_ids: ["baraka-otieno", "malik-dube"],
+    worker_assignments: [
+      {
+        booking_id: "booking-baroque-barbers",
+        worker_id: "baraka-otieno",
+        compensation_type: "monthly",
+        salary_expectation: "KSh 70,000/month",
+        commission_percentage: null,
+      },
+      {
+        booking_id: "booking-baroque-barbers",
+        worker_id: "malik-dube",
+        compensation_type: "monthly",
+        salary_expectation: "KSh 76,000/month",
+        commission_percentage: null,
+      },
+    ],
     team_request_id: "req-baroque-grooming",
     notes: "Beauty Connect is checking final worker availability.",
     payment_instructions: null,
@@ -694,6 +726,15 @@ export const bookings: BookingRecord[] = [
     booking_date: "2026-05-24",
     submitted_at: "2026-05-09T13:00:00.000Z",
     worker_ids: ["leila-hassan"],
+    worker_assignments: [
+      {
+        booking_id: "booking-leila-single",
+        worker_id: "leila-hassan",
+        compensation_type: "commission",
+        salary_expectation: "",
+        commission_percentage: 50,
+      },
+    ],
     team_request_id: null,
     notes: "Single nail technician booking awaiting review.",
     payment_instructions: null,
@@ -709,6 +750,15 @@ export const bookings: BookingRecord[] = [
     booking_date: "2026-05-25",
     submitted_at: "2026-05-07T15:45:00.000Z",
     worker_ids: ["thando-mbeki"],
+    worker_assignments: [
+      {
+        booking_id: "booking-thando-single",
+        worker_id: "thando-mbeki",
+        compensation_type: "monthly",
+        salary_expectation: "KSh 88,000/month",
+        commission_percentage: null,
+      },
+    ],
     team_request_id: null,
     notes: "Worker confirmed. Deposit is pending.",
     payment_instructions: defaultPaymentInstructions({
@@ -734,6 +784,15 @@ export const bookings: BookingRecord[] = [
     booking_date: "2026-04-18",
     submitted_at: "2026-04-05T09:00:00.000Z",
     worker_ids: ["zuri-kamau"],
+    worker_assignments: [
+      {
+        booking_id: "booking-atelier-makeup",
+        worker_id: "zuri-kamau",
+        compensation_type: "commission",
+        salary_expectation: "",
+        commission_percentage: 60,
+      },
+    ],
     team_request_id: "req-atelier-editorial",
     notes: "Deposit paid. Booking moved to hires.",
     payment_instructions: defaultPaymentInstructions({
@@ -759,6 +818,15 @@ export const bookings: BookingRecord[] = [
     booking_date: "2026-05-12",
     submitted_at: "2026-04-24T08:40:00.000Z",
     worker_ids: ["eshe-mwangi"],
+    worker_assignments: [
+      {
+        booking_id: "booking-serene-spa",
+        worker_id: "eshe-mwangi",
+        compensation_type: "monthly",
+        salary_expectation: "KSh 78,000/month",
+        commission_percentage: null,
+      },
+    ],
     team_request_id: "req-serene-rooms",
     notes: "Deposit paid. Worker is active.",
     payment_instructions: defaultPaymentInstructions({
@@ -785,6 +853,15 @@ export const hires: HireRecord[] = [
     payment_status: "paid",
     hire_date: "2026-04-18",
     worker_ids: ["zuri-kamau"],
+    worker_assignments: [
+      {
+        hire_id: "hire-atelier-makeup",
+        worker_id: "zuri-kamau",
+        compensation_type: "commission",
+        salary_expectation: "",
+        commission_percentage: 60,
+      },
+    ],
     payment_reference: "BC-PAY-4108",
   },
   {
@@ -795,6 +872,15 @@ export const hires: HireRecord[] = [
     payment_status: "paid",
     hire_date: "2026-05-12",
     worker_ids: ["eshe-mwangi"],
+    worker_assignments: [
+      {
+        hire_id: "hire-serene-spa",
+        worker_id: "eshe-mwangi",
+        compensation_type: "monthly",
+        salary_expectation: "KSh 78,000/month",
+        commission_percentage: null,
+      },
+    ],
     payment_reference: "BC-PAY-4124",
   },
 ];
@@ -870,7 +956,7 @@ export const adminActivityLogs: AdminActivityLogRecord[] = [
     id: "activity-luna-confirmed",
     type: "booking_confirmed",
     actor: "Grace",
-    message: "Confirmed Luna House opening team and moved workers to reserved.",
+    message: "Confirmed Luna House opening team with compensation terms.",
     booking_id: "booking-luna-team",
     worker_id: null,
     created_at: "2026-05-08T10:20:00.000Z",
@@ -879,7 +965,7 @@ export const adminActivityLogs: AdminActivityLogRecord[] = [
     id: "activity-amara-reserved",
     type: "worker_reserved",
     actor: "Grace",
-    message: "Reserved Amara Njeri for Luna House opening team.",
+    message: "Recorded Amara Njeri compensation terms for Luna House opening team.",
     booking_id: "booking-luna-team",
     worker_id: "amara-njeri",
     created_at: "2026-05-08T10:22:00.000Z",

@@ -75,12 +75,12 @@ values
     'Nairobi',
     8,
     'Luxury color specialist with strong floor polish and repeat-booking habits.',
-    'reserved',
+    'available',
     'verified',
     90000,
     'full-time',
     '+254 700 111 221',
-    'Reserved for a Nairobi expansion team after trial success.',
+    'Available for a Nairobi expansion team after trial success.',
     true,
     true
   ),
@@ -92,12 +92,12 @@ values
     'Nairobi',
     6,
     'High-floor barber with strong fade accuracy and fast membership chair turnover.',
-    'reserved',
+    'available',
     'verified',
     70000,
     'contract',
     '+254 701 443 008',
-    'Held for an urgent grooming club request.',
+    'Available for urgent grooming club requests.',
     true,
     true
   ),
@@ -109,12 +109,12 @@ values
     'Nairobi',
     8,
     'Luxury nail technician with high sanitation discipline and premium set presentation.',
-    'reserved',
+    'available',
     'verified',
     72000,
     'full-time',
     '+254 713 990 144',
-    'Reserved for launch-week manicure coverage.',
+    'Available for launch-week manicure coverage.',
     false,
     true
   ),
@@ -415,11 +415,17 @@ values
   )
 on conflict (id) do nothing;
 
-insert into public.booking_workers (booking_id, worker_id)
+insert into public.booking_workers (
+  booking_id,
+  worker_id,
+  compensation_type,
+  salary_expectation,
+  commission_percentage
+)
 values
-  ('booking-luna-team', 'amara-njeri'),
-  ('booking-luna-team', 'nadia-aziz'),
-  ('booking-baroque-barbers', 'baraka-otieno')
+  ('booking-luna-team', 'amara-njeri', 'monthly', 'KSh 90,000/month', null),
+  ('booking-luna-team', 'nadia-aziz', 'commission', '', 50),
+  ('booking-baroque-barbers', 'baraka-otieno', 'monthly', 'KSh 70,000/month', null)
 on conflict (booking_id, worker_id) do nothing;
 
 insert into public.payment_verifications (
@@ -496,7 +502,7 @@ values
     'activity-luna-confirmed',
     'booking_confirmed',
     'Grace',
-    'Confirmed Luna House opening team and moved workers to reserved.',
+    'Confirmed Luna House opening team with compensation terms.',
     'booking-luna-team',
     null,
     '2026-05-08T10:20:00.000Z'
@@ -505,7 +511,7 @@ values
     'activity-amara-reserved',
     'worker_reserved',
     'Grace',
-    'Reserved Amara Njeri for Luna House opening team.',
+    'Recorded Amara Njeri compensation terms for Luna House opening team.',
     'booking-luna-team',
     'amara-njeri',
     '2026-05-08T10:22:00.000Z'

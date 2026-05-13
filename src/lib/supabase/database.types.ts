@@ -209,6 +209,10 @@ export interface Database {
           notes: string;
           request_details: Json;
           payment_instructions: Json | null;
+          payment_lock_id: string | null;
+          payment_started_at: string | null;
+          payment_lock_expires_at: string | null;
+          payment_completed_at: string | null;
           updated_at: string;
         };
         Insert: Partial<Database["public"]["Tables"]["bookings"]["Row"]> & {
@@ -224,6 +228,9 @@ export interface Database {
         Row: {
           booking_id: string;
           worker_id: string;
+          compensation_type: string;
+          salary_expectation: string;
+          commission_percentage: number | null;
           created_at: string;
         };
         Insert: Partial<Database["public"]["Tables"]["booking_workers"]["Row"]> & {
@@ -254,6 +261,43 @@ export interface Database {
           Database["public"]["Tables"]["payment_verifications"]["Row"]
         >;
       };
+      mpesa_payments: {
+        Row: {
+          id: string;
+          booking_id: string;
+          payment_lock_id: string;
+          merchant_request_id: string | null;
+          checkout_request_id: string | null;
+          phone_number: string;
+          amount: number;
+          account_reference: string;
+          transaction_desc: string;
+          status: string;
+          result_code: number | null;
+          result_description: string | null;
+          mpesa_receipt_number: string | null;
+          transaction_date: string | null;
+          request_payload: Json;
+          response_payload: Json | null;
+          callback_payload: Json | null;
+          created_at: string;
+          updated_at: string;
+        };
+        Insert: Partial<
+          Database["public"]["Tables"]["mpesa_payments"]["Row"]
+        > & {
+          id: string;
+          booking_id: string;
+          payment_lock_id: string;
+          phone_number: string;
+          amount: number;
+          account_reference: string;
+          transaction_desc: string;
+        };
+        Update: Partial<
+          Database["public"]["Tables"]["mpesa_payments"]["Row"]
+        >;
+      };
       hires: {
         Row: {
           id: string;
@@ -280,6 +324,9 @@ export interface Database {
         Row: {
           hire_id: string;
           worker_id: string;
+          compensation_type: string;
+          salary_expectation: string;
+          commission_percentage: number | null;
           created_at: string;
         };
         Insert: Partial<Database["public"]["Tables"]["hire_workers"]["Row"]> & {

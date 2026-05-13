@@ -4,14 +4,21 @@ import { MessageCircle, Phone } from "lucide-react";
 
 import { buttonVariants } from "@/components/ui/button";
 import { Card, CardContent } from "@/components/ui/card";
-import type { Worker } from "@/lib/types";
+import type { HireWorkerAssignment, Worker } from "@/lib/types";
 import {
+  compensationSentence,
   workerContactPhone,
   workerWhatsappHref,
 } from "@/lib/booking-workflow";
 import { cn } from "@/lib/utils";
 
-export function HireContactCard({ worker }: { worker: Worker }) {
+export function HireContactCard({
+  worker,
+  assignment,
+}: {
+  worker: Worker;
+  assignment?: HireWorkerAssignment;
+}) {
   return (
     <Card>
       <CardContent className="grid grid-cols-[64px_minmax(0,1fr)] gap-3 p-3">
@@ -35,6 +42,11 @@ export function HireContactCard({ worker }: { worker: Worker }) {
           </div>
 
           <div className="grid gap-1.5 text-xs font-bold text-[color:var(--foreground)]">
+            {assignment ? (
+              <span className="rounded-md bg-[color:var(--muted)] px-2 py-1">
+                {compensationSentence(assignment)}
+              </span>
+            ) : null}
             <span className="flex min-w-0 items-center gap-1.5">
               <Phone className="h-3.5 w-3.5 shrink-0 text-emerald-700" />
               <span className="truncate">{workerContactPhone(worker)}</span>

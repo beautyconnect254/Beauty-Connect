@@ -19,7 +19,7 @@ export default async function BookingsPage() {
         <PageIntro
           eyebrow="Bookings"
           title="Reservation Pipeline"
-          description="Pending bookings are reviewed by Beauty Connect. Confirmed bookings show payment instructions; contacts unlock only in Hires."
+          description="Confirmed bookings show assigned workers, compensation terms, and the global platform fee. Workers lock only when deposit payment starts."
           actions={
             <ProtectedLink
               href="/team-builder"

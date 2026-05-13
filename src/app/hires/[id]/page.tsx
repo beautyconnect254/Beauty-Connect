@@ -12,7 +12,7 @@ import { buttonVariants } from "@/components/ui/button";
 import { Card, CardContent } from "@/components/ui/card";
 import { getUserHireById } from "@/lib/data-access";
 import { getCurrentUser } from "@/lib/user-auth";
-import { cn } from "@/lib/utils";
+import { cn, formatCurrency } from "@/lib/utils";
 
 interface HireDetailPageProps {
   params: Promise<{ id: string }>;
@@ -71,7 +71,7 @@ export default async function HireDetailPage({ params }: HireDetailPageProps) {
               </Badge>
             </div>
 
-            <div className="grid gap-2 sm:grid-cols-3">
+            <div className="grid gap-2 sm:grid-cols-4">
               <div className="rounded-md bg-[color:var(--muted)] p-3">
                 <Users className="h-4 w-4 text-emerald-700" />
                 <p className="mt-2 text-xs font-bold uppercase text-[color:var(--muted-foreground)]">
@@ -95,6 +95,17 @@ export default async function HireDetailPage({ params }: HireDetailPageProps) {
                 </p>
                 <p className="text-lg font-extrabold">{hire.payment_reference}</p>
               </div>
+              {hire.booking?.payment_instructions ? (
+                <div className="rounded-md bg-[color:var(--muted)] p-3">
+                  <CreditCard className="h-4 w-4 text-emerald-700" />
+                  <p className="mt-2 text-xs font-bold uppercase text-[color:var(--muted-foreground)]">
+                    Platform fee
+                  </p>
+                  <p className="text-lg font-extrabold">
+                    {formatCurrency(hire.booking.payment_instructions.deposit_amount)}
+                  </p>
+                </div>
+              ) : null}
             </div>
           </CardContent>
         </Card>
@@ -107,7 +118,13 @@ export default async function HireDetailPage({ params }: HireDetailPageProps) {
           </h2>
           <div className="grid gap-2.5 lg:grid-cols-2">
             {hire.workers.map((worker) => (
-              <HireContactCard key={worker.id} worker={worker} />
+              <HireContactCard
+                key={worker.id}
+                worker={worker}
+                assignment={hire.worker_assignments.find(
+                  (item) => item.worker_id === worker.id,
+                )}
+              />
             ))}
           </div>
         </section>

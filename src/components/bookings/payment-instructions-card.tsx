@@ -1,4 +1,4 @@
-import { Building2, CreditCard, Landmark } from "lucide-react";
+import { Building2, CreditCard } from "lucide-react";
 
 import { Card, CardContent } from "@/components/ui/card";
 import type { PaymentInstructions } from "@/lib/types";
@@ -23,14 +23,14 @@ export function PaymentInstructionsCard({
               Payment instructions
             </h2>
             <p className="mt-0.5 text-xs font-semibold leading-5 text-[color:var(--muted-foreground)]">
-              Manual payment only. Contacts unlock after admin verification.
+              M-Pesa STK Push. Contacts unlock after Daraja confirms payment.
             </p>
           </div>
         </div>
 
         <div className="grid gap-2 sm:grid-cols-3">
           <InstructionItem
-            label="Deposit amount"
+            label="Platform fee"
             value={formatCurrency(instructions.deposit_amount)}
           />
           <InstructionItem
@@ -40,7 +40,7 @@ export function PaymentInstructionsCard({
           <InstructionItem label="Paybill" value={instructions.mpesa_paybill} />
         </div>
 
-        <div className="grid gap-2 sm:grid-cols-2">
+        <div className="grid gap-2">
           <div className="rounded-md border border-[color:var(--border)] p-3">
             <div className="flex items-center gap-2 text-xs font-bold uppercase text-[color:var(--muted-foreground)]">
               <Building2 className="h-3.5 w-3.5" />
@@ -55,18 +55,6 @@ export function PaymentInstructionsCard({
                 <span className="font-bold">Account Number:</span>{" "}
                 {instructions.mpesa_account}
               </p>
-            </div>
-          </div>
-
-          <div className="rounded-md border border-[color:var(--border)] p-3">
-            <div className="flex items-center gap-2 text-xs font-bold uppercase text-[color:var(--muted-foreground)]">
-              <Landmark className="h-3.5 w-3.5" />
-              Bank transfer
-            </div>
-            <div className="mt-2 grid gap-1 text-sm">
-              <p className="font-bold">{instructions.bank_name}</p>
-              <p>{instructions.bank_account_name}</p>
-              <p>{instructions.bank_account_number}</p>
             </div>
           </div>
         </div>

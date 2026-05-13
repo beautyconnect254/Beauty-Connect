@@ -4,8 +4,9 @@ import { NextResponse, type NextRequest } from "next/server";
 
 import { getAdminSession } from "@/lib/admin-auth";
 import {
-  ACTIVE_BOOKING_STATUSES,
+  LOCKING_BOOKING_STATUSES,
   defaultPaymentInstructions,
+  normalizeCommissionPercentage,
 } from "@/lib/booking-workflow";
 import {
   WORKER_CAPACITY_SETTING_KEY,
@@ -18,15 +19,18 @@ interface RouteContext {
 }
 
 type AdminBookingPayload =
-  | {
-      action: "confirm";
-      workerIds: string[];
-    }
-  | {
-      action: "verify_payment";
-      paymentReference: string;
-      workerIds: string[];
-    };
+  {
+    action: "confirm";
+    workerIds: string[];
+    workerAssignments: AdminWorkerAssignmentPayload[];
+  };
+
+interface AdminWorkerAssignmentPayload {
+  workerId: string;
+  compensationType: "monthly" | "commission";
+  salaryExpectation: string;
+  commissionPercentage: number | null;
+}
 
 interface AdminBookingRow {
   id: string;
@@ -42,6 +46,82 @@ function cleanText(value: unknown) {
   return typeof value === "string" ? value.trim() : "";
 }
 
+function parseWorkerAssignments(body: Record<string, unknown>) {
+  const rows = Array.isArray(body.workerAssignments)
+    ? body.workerAssignments
+    : [];
+  const assignments = rows
+    .map((item) => {
+      const record = item as Record<string, unknown>;
+      const workerId = cleanText(record.workerId);
+      const compensationType =
+        record.compensationType === "commission" ? "commission" : "monthly";
+      const commissionPercentage = normalizeCommissionPercentage(
+        record.commissionPercentage,
+      );
+
+      if (!workerId) {
+        return null;
+      }
+
+      return {
+        workerId,
+        compensationType,
+        salaryExpectation:
+          compensationType === "monthly"
+            ? cleanText(record.salaryExpectation)
+            : "",
+        commissionPercentage:
+          compensationType === "commission" ? commissionPercentage : null,
+      } satisfies AdminWorkerAssignmentPayload;
+    })
+    .filter((item): item is AdminWorkerAssignmentPayload => Boolean(item));
+
+  if (assignments.length > 0) {
+    return assignments;
+  }
+
+  return Array.isArray(body.workerIds)
+    ? body.workerIds
+        .map(cleanText)
+        .filter(Boolean)
+        .map((workerId) => ({
+          workerId,
+          compensationType: "monthly" as const,
+          salaryExpectation: "",
+          commissionPercentage: null,
+        }))
+    : [];
+}
+
+function validateWorkerAssignments(assignments: AdminWorkerAssignmentPayload[]) {
+  const seen = new Set<string>();
+
+  for (const assignment of assignments) {
+    if (seen.has(assignment.workerId)) {
+      return "Each worker can only be assigned once.";
+    }
+
+    seen.add(assignment.workerId);
+
+    if (
+      assignment.compensationType === "monthly" &&
+      !assignment.salaryExpectation
+    ) {
+      return "Enter salary expectation for monthly workers.";
+    }
+
+    if (
+      assignment.compensationType === "commission" &&
+      assignment.commissionPercentage === null
+    ) {
+      return "Enter commission percentage for commission workers.";
+    }
+  }
+
+  return "";
+}
+
 async function readPayload(request: NextRequest): Promise<AdminBookingPayload | null> {
   const body = (await request.json().catch(() => null)) as
     | Record<string, unknown>
@@ -52,25 +132,13 @@ async function readPayload(request: NextRequest): Promise<AdminBookingPayload | 
   }
 
   if (body.action === "confirm") {
-    const workerIds = Array.isArray(body.workerIds)
-      ? body.workerIds.map(cleanText).filter(Boolean)
-      : [];
+    const workerAssignments = parseWorkerAssignments(body);
+    const workerIds = workerAssignments.map((assignment) => assignment.workerId);
 
     return {
       action: "confirm",
       workerIds,
-    };
-  }
-
-  if (body.action === "verify_payment") {
-    const workerIds = Array.isArray(body.workerIds)
-      ? body.workerIds.map(cleanText).filter(Boolean)
-      : [];
-
-    return {
-      action: "verify_payment",
-      paymentReference: cleanText(body.paymentReference),
-      workerIds,
+      workerAssignments,
     };
   }
 
@@ -137,16 +205,22 @@ async function getActiveBookingCounts(
 
   const { data: bookingRows, error: bookingError } = await supabase
     .from("bookings")
-    .select("id")
+    .select("id, status, payment_lock_expires_at")
     .in("id", bookingIds)
-    .in("status", [...ACTIVE_BOOKING_STATUSES]);
+    .in("status", [...LOCKING_BOOKING_STATUSES]);
 
   if (bookingError) {
     throw bookingError;
   }
 
   const activeBookingIds = new Set(
-    (bookingRows ?? []).map((booking) => booking.id),
+    (bookingRows ?? [])
+      .filter(
+        (booking) =>
+          booking.status === "paid" ||
+          new Date(booking.payment_lock_expires_at ?? 0).getTime() > Date.now(),
+      )
+      .map((booking) => booking.id),
   );
   const counts = new Map<string, number>();
 
@@ -207,6 +281,39 @@ export async function PATCH(request: NextRequest, context: RouteContext) {
   }
 
   if (payload.action === "confirm") {
+    const assignmentError = validateWorkerAssignments(payload.workerAssignments);
+
+    if (assignmentError) {
+      return errorResponse(assignmentError, 400);
+    }
+
+    if (booking.type === "worker") {
+      const { data: requestedWorkers, error: requestedWorkersError } =
+        await supabase
+          .from("booking_workers")
+          .select("worker_id")
+          .eq("booking_id", id);
+
+      if (requestedWorkersError) {
+        return errorResponse(requestedWorkersError.message, 500);
+      }
+
+      const requestedWorkerId = (
+        (requestedWorkers ?? []) as Array<{ worker_id: string }>
+      )[0]?.worker_id;
+
+      if (
+        payload.workerIds.length !== 1 ||
+        !requestedWorkerId ||
+        payload.workerIds[0] !== requestedWorkerId
+      ) {
+        return errorResponse(
+          "Single bookings must confirm the exact requested worker.",
+          400,
+        );
+      }
+    }
+
     try {
       const [capacityLimit, activeCounts] = await Promise.all([
         getWorkerCapacityLimit(supabase),
@@ -253,9 +360,12 @@ export async function PATCH(request: NextRequest, context: RouteContext) {
     await supabase.from("booking_workers").delete().eq("booking_id", id);
 
     const { error: workerError } = await supabase.from("booking_workers").insert(
-      payload.workerIds.map((workerId) => ({
+      payload.workerAssignments.map((assignment) => ({
         booking_id: id,
-        worker_id: workerId,
+        worker_id: assignment.workerId,
+        compensation_type: assignment.compensationType,
+        salary_expectation: assignment.salaryExpectation,
+        commission_percentage: assignment.commissionPercentage,
       })),
     );
 
@@ -265,11 +375,6 @@ export async function PATCH(request: NextRequest, context: RouteContext) {
       return errorResponse(workerError.message, status);
     }
 
-    await supabase
-      .from("workers")
-      .update({ availability_status: "reserved" })
-      .in("id", payload.workerIds);
-
     await supabase.from("payment_verifications").upsert({
       id: `verification-${id}`,
       booking_id: id,
@@ -277,14 +382,14 @@ export async function PATCH(request: NextRequest, context: RouteContext) {
       submitted_reference: null,
       verified_by: null,
       verified_at: null,
-      notes: "Awaiting manual deposit verification.",
+      notes: "Awaiting Daraja payment callback.",
     });
 
     await supabase.from("admin_activity_logs").insert({
       id: `activity-${randomUUID()}`,
       type: "booking_confirmed",
       actor: adminSession.email,
-      message: `${booking.title} moved from pending to confirmed.`,
+      message: `${booking.title} moved from pending to confirmed with compensation terms.`,
       booking_id: id,
       worker_id: null,
     });
@@ -292,74 +397,8 @@ export async function PATCH(request: NextRequest, context: RouteContext) {
     return NextResponse.json({ ok: true });
   }
 
-  const reference =
-    payload.paymentReference ||
-    `MANUAL-${booking.id.replace(/^booking-/, "").toUpperCase()}`;
-
-  const { error: updateError } = await supabase
-    .from("bookings")
-    .update({
-      status: "paid",
-      payment_status: "deposit_paid",
-    })
-    .eq("id", id);
-
-  if (updateError) {
-    return errorResponse(updateError.message, 500);
-  }
-
-  await supabase.from("payment_verifications").upsert({
-    id: `verification-${id}`,
-    booking_id: id,
-    status: "verified",
-    submitted_reference: reference,
-    verified_by: adminSession.email,
-    verified_at: new Date().toISOString(),
-    notes: "Deposit verified manually. Worker contacts released.",
-  });
-
-  await supabase
-    .from("workers")
-    .update({ availability_status: "hired" })
-    .in("id", payload.workerIds);
-
-  const hireId = `hire-${id}`;
-  const { error: hireError } = await supabase.from("hires").upsert({
-    id: hireId,
-    user_id: booking.user_id,
-    booking_id: id,
-    title: `${booking.title} hire`,
-    status: "active",
-    payment_status: "paid",
-    hire_date: booking.booking_date,
-    payment_reference: reference,
-  });
-
-  if (hireError) {
-    return errorResponse(hireError.message, 500);
-  }
-
-  await supabase.from("hire_workers").delete().eq("hire_id", hireId);
-
-  const { error: hireWorkersError } = await supabase.from("hire_workers").insert(
-    payload.workerIds.map((workerId) => ({
-      hire_id: hireId,
-      worker_id: workerId,
-    })),
+  return errorResponse(
+    "M-Pesa callback is the only source of truth for paid bookings.",
+    403,
   );
-
-  if (hireWorkersError) {
-    return errorResponse(hireWorkersError.message, 500);
-  }
-
-  await supabase.from("admin_activity_logs").insert({
-    id: `activity-${randomUUID()}`,
-    type: "payment_confirmed",
-    actor: adminSession.email,
-    message: `${booking.title} payment verified manually with reference ${reference}.`,
-    booking_id: id,
-    worker_id: null,
-  });
-
-  return NextResponse.json({ ok: true });
 }

@@ -7,7 +7,7 @@ import {
   getWorkersAsync,
 } from "@/lib/data-access";
 
-export default async function AdminConfirmedSingleBookingsPage() {
+export default async function AdminPaymentPendingSingleBookingsPage() {
   const [bookings, workers, capacitySettings] = await Promise.all([
     getBookingsAsync(),
     getWorkersAsync(),
@@ -18,14 +18,14 @@ export default async function AdminConfirmedSingleBookingsPage() {
     <div className="space-y-4">
       <PageIntro
         eyebrow="Bookings"
-        title="Confirmed Single Bookings"
-        description="Review exact requested workers and compensation terms before the client starts deposit payment."
+        title="Payment Pending Single Bookings"
+        description="Review single-worker bookings with active payment locks before Daraja completion or expiry."
       />
       <AdminBookingsClient
         initialBookings={bookings}
         initialWorkers={workers}
         initialActivityLogs={getAdminActivityLogs()}
-        status="confirmed"
+        status="payment_pending"
         type="worker"
         capacityLimit={capacitySettings.max_active_bookings_per_worker}
       />

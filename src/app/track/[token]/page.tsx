@@ -8,6 +8,7 @@ import {
   ShieldCheck,
 } from "lucide-react";
 
+import { BookingPaymentAction } from "@/components/bookings/booking-payment-action";
 import { PaymentInstructionsCard } from "@/components/bookings/payment-instructions-card";
 import { SiteShell } from "@/components/layout/site-shell";
 import { Badge } from "@/components/ui/badge";
@@ -16,9 +17,11 @@ import { Card, CardContent } from "@/components/ui/card";
 import {
   bookingStatusClass,
   bookingStatusLabel,
+  compensationSentence,
   defaultPaymentInstructions,
 } from "@/lib/booking-workflow";
 import { formatExperienceMonths, minimumExperienceMonths } from "@/lib/experience";
+import { expireStalePaymentLocks } from "@/lib/payment-locks";
 import { createSupabaseServerClient } from "@/lib/supabase/server";
 import type {
   BookingRequestDetails,
@@ -39,6 +42,13 @@ interface TrackedWorker {
   full_name: string;
   primary_role: string;
   whatsapp_number: string;
+}
+
+interface TrackedAssignment {
+  worker_id: string;
+  compensation_type: "monthly" | "commission";
+  salary_expectation: string;
+  commission_percentage: number | null;
 }
 
 function isObject(value: unknown): value is Record<string, unknown> {
@@ -71,15 +81,27 @@ function statusCopy(status: BookingStatus) {
       };
     case "confirmed":
       return {
-        title: "Workers secured",
-        body: "Your workers are reserved. Please pay the deposit using the instructions below.",
+        title: "Workers assigned",
+        body: "Your workers are confirmed. They lock when you start deposit payment.",
         icon: ShieldCheck,
+      };
+    case "payment_pending":
+      return {
+        title: "Payment in progress",
+        body: "Workers are locked briefly while deposit payment starts.",
+        icon: Clock3,
       };
     case "paid":
       return {
         title: "Workers released",
         body: "Payment has been verified. Worker contacts are now available.",
         icon: CheckCircle2,
+      };
+    case "expired":
+      return {
+        title: "Booking expired",
+        body: "This booking is no longer active.",
+        icon: Clock3,
       };
     default:
       return {
@@ -104,6 +126,8 @@ export default async function TrackBookingPage({ params }: TrackPageProps) {
     notFound();
   }
 
+  await expireStalePaymentLocks();
+
   const { data: booking, error } = await supabase
     .from("bookings")
     .select("*")
@@ -118,7 +142,9 @@ export default async function TrackBookingPage({ params }: TrackPageProps) {
     await Promise.all([
       supabase
         .from("booking_workers")
-        .select("worker_id")
+        .select(
+          "worker_id, compensation_type, salary_expectation, commission_percentage",
+        )
         .eq("booking_id", booking.id),
       supabase
         .from("payment_verifications")
@@ -129,6 +155,18 @@ export default async function TrackBookingPage({ params }: TrackPageProps) {
         .maybeSingle(),
     ]);
   const workerIds = bookingWorkers?.map((item) => item.worker_id) ?? [];
+  const assignments = ((bookingWorkers ?? []) as Array<{
+    worker_id: string;
+    compensation_type?: string | null;
+    salary_expectation?: string | null;
+    commission_percentage?: number | null;
+  }>).map((assignment) => ({
+    worker_id: assignment.worker_id,
+    compensation_type:
+      assignment.compensation_type === "commission" ? "commission" : "monthly",
+    salary_expectation: assignment.salary_expectation ?? "",
+    commission_percentage: assignment.commission_percentage ?? null,
+  })) satisfies TrackedAssignment[];
   const { data: workers } =
     workerIds.length > 0
       ? await supabase
@@ -147,7 +185,7 @@ export default async function TrackBookingPage({ params }: TrackPageProps) {
     1;
   const instructions =
     paymentInstructions(booking.payment_instructions) ??
-    (status === "confirmed"
+    (status === "confirmed" || status === "payment_pending"
       ? defaultPaymentInstructions({
           id: booking.id,
           type: bookingType,
@@ -199,6 +237,12 @@ export default async function TrackBookingPage({ params }: TrackPageProps) {
                 value={format(parseISO(booking.booking_date), "MMM d, yyyy")}
               />
               <InfoBlock label="Workers" value={String(workerCount)} />
+              {instructions ? (
+                <InfoBlock
+                  label="Platform fee"
+                  value={`KSh ${Number(instructions.deposit_amount).toLocaleString("en-KE")}`}
+                />
+              ) : null}
             </div>
           </CardContent>
         </Card>
@@ -273,11 +317,51 @@ export default async function TrackBookingPage({ params }: TrackPageProps) {
                 </p>
               </div>
             ) : null}
+
+            {trackedWorkers.length > 0 ? (
+              <div className="space-y-2">
+                <p className="text-xs font-bold uppercase text-[color:var(--muted-foreground)]">
+                  Assigned workers
+                </p>
+                {trackedWorkers.map((worker) => {
+                  const assignment = assignments.find(
+                    (item) => item.worker_id === worker.id,
+                  );
+
+                  return (
+                    <div
+                      key={worker.id}
+                      className="rounded-md border border-[color:var(--border)] bg-white p-3"
+                    >
+                      <p className="text-sm font-extrabold text-[color:var(--foreground)]">
+                        {worker.full_name}
+                      </p>
+                      <p className="text-xs text-[color:var(--muted-foreground)]">
+                        {worker.primary_role}
+                      </p>
+                      {assignment ? (
+                        <p className="mt-2 rounded-md bg-[color:var(--muted)] px-2 py-1 text-xs font-bold text-[color:var(--foreground)]">
+                          {compensationSentence(assignment)}
+                        </p>
+                      ) : null}
+                    </div>
+                  );
+                })}
+              </div>
+            ) : null}
           </CardContent>
         </Card>
 
-        {status === "confirmed" && instructions ? (
-          <PaymentInstructionsCard instructions={instructions} />
+        {(status === "confirmed" || status === "payment_pending") && instructions ? (
+          <div className="space-y-3">
+            <PaymentInstructionsCard instructions={instructions} />
+            <BookingPaymentAction
+              trackingToken={token}
+              status={status}
+              lockExpiresAt={booking.payment_lock_expires_at}
+              defaultPhone={details.client?.contact_whatsapp ?? ""}
+            />
+          </div>
         ) : null}
 
         {status !== "paid" ? (
@@ -298,32 +382,43 @@ export default async function TrackBookingPage({ params }: TrackPageProps) {
                 Worker contacts
               </h2>
               {trackedWorkers.length > 0 ? (
-                trackedWorkers.map((worker) => (
-                  <div
-                    key={worker.id}
-                    className="rounded-md border border-emerald-200 bg-emerald-50 p-3"
-                  >
-                    <p className="font-extrabold text-[color:var(--foreground)]">
-                      {worker.full_name}
-                    </p>
-                    <p className="text-xs text-[color:var(--muted-foreground)]">
-                      {worker.primary_role}
-                    </p>
-                    <div className="mt-3 grid gap-2 sm:grid-cols-[1fr_auto] sm:items-center">
-                      <p className="flex items-center gap-2 text-sm font-extrabold text-[color:var(--foreground)]">
-                        <Phone className="h-4 w-4" />
-                        {worker.whatsapp_number}
+                trackedWorkers.map((worker) => {
+                  const assignment = assignments.find(
+                    (item) => item.worker_id === worker.id,
+                  );
+
+                  return (
+                    <div
+                      key={worker.id}
+                      className="rounded-md border border-emerald-200 bg-emerald-50 p-3"
+                    >
+                      <p className="font-extrabold text-[color:var(--foreground)]">
+                        {worker.full_name}
                       </p>
-                      <a
-                        href={`https://wa.me/${normalizePhone(worker.whatsapp_number)}`}
-                        target="_blank"
-                        rel="noreferrer"
-                      >
-                        <Button className="w-full sm:w-auto">WhatsApp</Button>
-                      </a>
+                      <p className="text-xs text-[color:var(--muted-foreground)]">
+                        {worker.primary_role}
+                      </p>
+                      {assignment ? (
+                        <p className="mt-2 rounded-md bg-white/80 px-2 py-1 text-xs font-bold text-emerald-900">
+                          {compensationSentence(assignment)}
+                        </p>
+                      ) : null}
+                      <div className="mt-3 grid gap-2 sm:grid-cols-[1fr_auto] sm:items-center">
+                        <p className="flex items-center gap-2 text-sm font-extrabold text-[color:var(--foreground)]">
+                          <Phone className="h-4 w-4" />
+                          {worker.whatsapp_number}
+                        </p>
+                        <a
+                          href={`https://wa.me/${normalizePhone(worker.whatsapp_number)}`}
+                          target="_blank"
+                          rel="noreferrer"
+                        >
+                          <Button className="w-full sm:w-auto">WhatsApp</Button>
+                        </a>
+                      </div>
                     </div>
-                  </div>
-                ))
+                  );
+                })
               ) : (
                 <p className="rounded-md border border-dashed border-[color:var(--border)] p-3 text-sm text-[color:var(--muted-foreground)]">
                   Payment is marked paid, but worker contacts have not been attached yet.

@@ -1,6 +1,11 @@
 import {
+  bookingLocksWorkers,
   bookingIsActive,
+  defaultCommissionPercentage,
+  defaultCompensationType,
   defaultPaymentInstructions,
+  defaultSalaryExpectation,
+  normalizeCommissionPercentage,
 } from "@/lib/booking-workflow";
 import {
   DEFAULT_MAX_ACTIVE_BOOKINGS_PER_WORKER,
@@ -39,9 +44,12 @@ import type {
   Booking,
   BookingRecord,
   BookingRequestDetails,
+  BookingWorkerAssignmentRecord,
+  CompensationType,
   DashboardMetric,
   FeaturedStatus,
   Hire,
+  HireWorkerAssignmentRecord,
   AdminPaymentVerification,
   PaymentInstructions,
   RoleSpecialtyCatalog,
@@ -76,7 +84,14 @@ const documentStatuses: VerificationDocumentStatus[] = [
   "verified",
   "rejected",
 ];
-const bookingStatuses = ["pending", "confirmed", "paid", "cancelled"] as const;
+const bookingStatuses = [
+  "pending",
+  "confirmed",
+  "payment_pending",
+  "paid",
+  "expired",
+  "cancelled",
+] as const;
 const paymentStatuses = ["not_due", "deposit_due", "deposit_paid", "paid"] as const;
 const hireStatuses = ["active", "completed"] as const;
 
@@ -302,13 +317,23 @@ async function getWorkersFromSupabase(): Promise<Worker[]> {
     bookingIdsForWorkers.length > 0
       ? await supabase
           .from("bookings")
-          .select("id, status")
+          .select("id, status, payment_lock_expires_at")
           .in("id", bookingIdsForWorkers)
-          .in("status", ["pending", "confirmed", "paid"])
+          .in("status", ["payment_pending", "paid"])
       : { data: [] };
   const activeBookingIds = new Set(
-    ((activeBookingRows ?? []) as Array<{ id: string; status: string | null }>)
-      .filter((booking) => isActiveBookingStatus(booking.status ?? ""))
+    ((activeBookingRows ?? []) as Array<{
+      id: string;
+      status: string | null;
+      payment_lock_expires_at?: string | null;
+    }>)
+      .filter(
+        (booking) =>
+          isActiveBookingStatus(booking.status ?? "") &&
+          (booking.status === "paid" ||
+            new Date(booking.payment_lock_expires_at ?? 0).getTime() >
+              Date.now()),
+      )
       .map((booking) => booking.id),
   );
   const activeBookingCountsByWorker = new Map<string, number>();
@@ -506,7 +531,7 @@ function getActiveAssignmentForWorker(workerId: string) {
 function getActiveBookingCountForWorker(workerId: string) {
   return bookings.filter(
     (booking) =>
-      bookingIsActive(booking.status) && booking.worker_ids.includes(workerId),
+      bookingLocksWorkers(booking.status) && booking.worker_ids.includes(workerId),
   ).length;
 }
 
@@ -715,13 +740,19 @@ export async function getWorkerCapacitySettingsAsync(): Promise<WorkerCapacitySe
 
 export function getPublicWorkers() {
   return getWorkers().filter(
-    (worker) => worker.verification_status === "verified" && worker.listed_publicly,
+    (worker) =>
+      worker.verification_status === "verified" &&
+      worker.listed_publicly &&
+      worker.availability_status === "available",
   );
 }
 
 export async function getPublicWorkersAsync() {
   return (await getWorkersAsync()).filter(
-    (worker) => worker.verification_status === "verified" && worker.listed_publicly,
+    (worker) =>
+      worker.verification_status === "verified" &&
+      worker.listed_publicly &&
+      worker.availability_status === "available",
   );
 }
 
@@ -765,7 +796,9 @@ export function getPublicWorkerById(id: string) {
     return undefined;
   }
 
-  return worker.verification_status === "verified" && worker.listed_publicly
+  return worker.verification_status === "verified" &&
+    worker.listed_publicly &&
+    worker.availability_status === "available"
     ? worker
     : undefined;
 }
@@ -777,7 +810,9 @@ export async function getPublicWorkerByIdAsync(id: string) {
     return undefined;
   }
 
-  return worker.verification_status === "verified" && worker.listed_publicly
+  return worker.verification_status === "verified" &&
+    worker.listed_publicly &&
+    worker.availability_status === "available"
     ? worker
     : undefined;
 }
@@ -873,11 +908,18 @@ type SupabaseBookingRow = {
   notes: string | null;
   request_details: unknown;
   payment_instructions: unknown;
+  payment_lock_id?: string | null;
+  payment_started_at?: string | null;
+  payment_lock_expires_at?: string | null;
+  payment_completed_at?: string | null;
 };
 
 type SupabaseBookingWorkerRow = {
   booking_id: string;
   worker_id: string;
+  compensation_type?: string | null;
+  salary_expectation?: string | null;
+  commission_percentage?: number | string | null;
 };
 
 type SupabasePaymentVerificationRow = {
@@ -904,6 +946,9 @@ type SupabaseHireRow = {
 type SupabaseHireWorkerRow = {
   hire_id: string;
   worker_id: string;
+  compensation_type?: string | null;
+  salary_expectation?: string | null;
+  commission_percentage?: number | string | null;
 };
 
 function isRecord(value: unknown): value is Record<string, unknown> {
@@ -936,6 +981,110 @@ function parsePaymentVerification(
     verified_at: value.verified_at,
     notes: value.notes ?? "",
   };
+}
+
+function parseCompensationType(value: unknown): CompensationType {
+  return value === "commission" ? "commission" : "monthly";
+}
+
+function defaultBookingWorkerAssignment(
+  bookingId: string,
+  workerId: string,
+  worker?: Worker,
+): BookingWorkerAssignmentRecord {
+  const compensationType = worker ? defaultCompensationType(worker) : "monthly";
+
+  return {
+    booking_id: bookingId,
+    worker_id: workerId,
+    compensation_type: compensationType,
+    salary_expectation:
+      compensationType === "monthly" && worker
+        ? defaultSalaryExpectation(worker)
+        : "",
+    commission_percentage:
+      compensationType === "commission" && worker
+        ? defaultCommissionPercentage(worker)
+        : null,
+  };
+}
+
+function normalizeBookingWorkerAssignment(
+  row: SupabaseBookingWorkerRow,
+  worker?: Worker,
+): BookingWorkerAssignmentRecord {
+  const fallback = defaultBookingWorkerAssignment(
+    row.booking_id,
+    row.worker_id,
+    worker,
+  );
+  const compensationType = parseCompensationType(
+    row.compensation_type ?? fallback.compensation_type,
+  );
+
+  return {
+    booking_id: row.booking_id,
+    worker_id: row.worker_id,
+    compensation_type: compensationType,
+    salary_expectation:
+      compensationType === "monthly"
+        ? cleanString(row.salary_expectation) || fallback.salary_expectation
+        : "",
+    commission_percentage:
+      compensationType === "commission"
+        ? normalizeCommissionPercentage(
+            row.commission_percentage ?? fallback.commission_percentage,
+          )
+        : null,
+  };
+}
+
+function normalizeHireWorkerAssignment(
+  row: SupabaseHireWorkerRow,
+  fallback?: BookingWorkerAssignmentRecord,
+  worker?: Worker,
+): HireWorkerAssignmentRecord {
+  const fallbackBookingAssignment =
+    fallback ?? defaultBookingWorkerAssignment("", row.worker_id, worker);
+  const compensationType = parseCompensationType(
+    row.compensation_type ?? fallbackBookingAssignment.compensation_type,
+  );
+
+  return {
+    hire_id: row.hire_id,
+    worker_id: row.worker_id,
+    compensation_type: compensationType,
+    salary_expectation:
+      compensationType === "monthly"
+        ? cleanString(row.salary_expectation) ||
+          fallbackBookingAssignment.salary_expectation
+        : "",
+    commission_percentage:
+      compensationType === "commission"
+        ? normalizeCommissionPercentage(
+            row.commission_percentage ??
+              fallbackBookingAssignment.commission_percentage,
+          )
+        : null,
+  };
+}
+
+function cleanString(value: unknown) {
+  return typeof value === "string" ? value.trim() : "";
+}
+
+async function expireStalePaymentLocks() {
+  const supabase = createSupabaseServiceClient();
+
+  if (!supabase) {
+    return;
+  }
+
+  try {
+    await supabase.rpc("expire_stale_payment_locks");
+  } catch {
+    // The migration may not be applied in local preview environments yet.
+  }
 }
 
 async function getTeamRequestsFromSupabase(
@@ -1084,12 +1233,31 @@ function hydrateBookingFromSupabase(
   const hydratedWorkers = record.worker_ids
     .map((workerId) => workersById.get(workerId))
     .filter((worker): worker is Worker => Boolean(worker));
+  const assignmentRecords =
+    record.worker_assignments?.length
+      ? record.worker_assignments
+      : record.worker_ids.map((workerId) =>
+          defaultBookingWorkerAssignment(
+            record.id,
+            workerId,
+            workersById.get(workerId),
+          ),
+        );
+  const hydratedAssignments = assignmentRecords
+    .map((assignment) => {
+      const worker = workersById.get(assignment.worker_id);
+
+      return worker ? { ...assignment, worker } : null;
+    })
+    .filter((assignment): assignment is Booking["worker_assignments"][number] =>
+      Boolean(assignment),
+    );
 
   return {
     ...record,
     payment_instructions:
       record.payment_instructions ??
-      (record.status === "confirmed"
+      (record.status === "confirmed" || record.status === "payment_pending"
         ? defaultPaymentInstructions({
             id: record.id,
             type: record.type,
@@ -1097,6 +1265,7 @@ function hydrateBookingFromSupabase(
           })
         : null),
     workers: hydratedWorkers,
+    worker_assignments: hydratedAssignments,
     team_request: record.team_request_id
       ? teamRequestsById.get(record.team_request_id) ?? null
       : null,
@@ -1113,6 +1282,8 @@ async function getBookingsFromSupabase(options?: {
   if (!supabase) {
     return [];
   }
+
+  await expireStalePaymentLocks();
 
   let query = supabase
     .from("bookings")
@@ -1131,6 +1302,10 @@ async function getBookingsFromSupabase(options?: {
         "notes",
         "request_details",
         "payment_instructions",
+        "payment_lock_id",
+        "payment_started_at",
+        "payment_lock_expires_at",
+        "payment_completed_at",
       ].join(", "),
     )
     .order("submitted_at", { ascending: false });
@@ -1172,7 +1347,15 @@ async function getBookingsFromSupabase(options?: {
   ] = await Promise.all([
     supabase
       .from("booking_workers")
-      .select("booking_id, worker_id")
+      .select(
+        [
+          "booking_id",
+          "worker_id",
+          "compensation_type",
+          "salary_expectation",
+          "commission_percentage",
+        ].join(", "),
+      )
       .in("booking_id", bookingIds),
     supabase
       .from("payment_verifications")
@@ -1192,15 +1375,15 @@ async function getBookingsFromSupabase(options?: {
     ].map((request) => [request.id, request]),
   );
   const workerIdsByBooking = new Map<string, string[]>();
+  const bookingWorkerRows =
+    (bookingWorkersResult.data ?? []) as unknown as SupabaseBookingWorkerRow[];
 
-  ((bookingWorkersResult.data ?? []) as SupabaseBookingWorkerRow[]).forEach(
-    (item) => {
-      workerIdsByBooking.set(item.booking_id, [
-        ...(workerIdsByBooking.get(item.booking_id) ?? []),
-        item.worker_id,
-      ]);
-    },
-  );
+  bookingWorkerRows.forEach((item) => {
+    workerIdsByBooking.set(item.booking_id, [
+      ...(workerIdsByBooking.get(item.booking_id) ?? []),
+      item.worker_id,
+    ]);
+  });
 
   const paymentVerificationByBooking = new Map<
     string,
@@ -1231,6 +1414,14 @@ async function getBookingsFromSupabase(options?: {
       booking_date: booking.booking_date,
       submitted_at: booking.submitted_at,
       worker_ids: workerIdsByBooking.get(booking.id) ?? [],
+      worker_assignments: bookingWorkerRows
+        .filter((item) => item.booking_id === booking.id)
+        .map((item) =>
+          normalizeBookingWorkerAssignment(
+            item,
+            workersById.get(item.worker_id),
+          ),
+        ),
       team_request_id: booking.team_request_id,
       notes: booking.notes ?? "",
       request_details: parseRequestDetails(booking.request_details),
@@ -1238,6 +1429,10 @@ async function getBookingsFromSupabase(options?: {
       payment_verification: parsePaymentVerification(
         paymentVerificationByBooking.get(booking.id),
       ),
+      payment_lock_id: booking.payment_lock_id ?? null,
+      payment_started_at: booking.payment_started_at ?? null,
+      payment_lock_expires_at: booking.payment_lock_expires_at ?? null,
+      payment_completed_at: booking.payment_completed_at ?? null,
     };
 
     return hydrateBookingFromSupabase(record, workersById, teamRequestsById);
@@ -1248,12 +1443,32 @@ function hydrateBooking(record: BookingRecord): Booking {
   const hydratedWorkers = record.worker_ids
     .map((workerId) => hydrateWorker(workerId))
     .filter((worker): worker is Worker => Boolean(worker));
+  const workersById = new Map(hydratedWorkers.map((worker) => [worker.id, worker]));
+  const assignmentRecords =
+    record.worker_assignments?.length
+      ? record.worker_assignments
+      : record.worker_ids.map((workerId) =>
+          defaultBookingWorkerAssignment(
+            record.id,
+            workerId,
+            workersById.get(workerId),
+          ),
+        );
+  const hydratedAssignments = assignmentRecords
+    .map((assignment) => {
+      const worker = workersById.get(assignment.worker_id);
+
+      return worker ? { ...assignment, worker } : null;
+    })
+    .filter((assignment): assignment is Booking["worker_assignments"][number] =>
+      Boolean(assignment),
+    );
 
   return {
     ...record,
     payment_instructions:
       record.payment_instructions ??
-      (record.status === "confirmed"
+      (record.status === "confirmed" || record.status === "payment_pending"
         ? defaultPaymentInstructions({
             id: record.id,
             type: record.type,
@@ -1261,6 +1476,7 @@ function hydrateBooking(record: BookingRecord): Booking {
           })
         : null),
     workers: hydratedWorkers,
+    worker_assignments: hydratedAssignments,
     team_request: record.team_request_id ? getTeamRequestById(record.team_request_id) ?? null : null,
     worker_count: hydratedWorkers.length,
   };
@@ -1305,11 +1521,43 @@ export function getHires(): Hire[] {
         .map((workerId) => hydrateWorker(workerId))
         .filter((worker): worker is Worker => Boolean(worker));
       const sourceBooking = bookings.find((booking) => booking.id === hire.booking_id);
+      const hydratedBooking = sourceBooking ? hydrateBooking(sourceBooking) : null;
+      const sourceAssignmentsByWorker = new Map(
+        hydratedBooking?.worker_assignments.map((assignment) => [
+          assignment.worker_id,
+          assignment,
+        ]) ?? [],
+      );
+      const workerAssignments = hydratedWorkers.map((worker) => {
+        const sourceAssignment = sourceAssignmentsByWorker.get(worker.id);
+        const record =
+          hire.worker_assignments?.find(
+            (assignment) => assignment.worker_id === worker.id,
+          ) ??
+          (sourceAssignment
+            ? {
+                hire_id: hire.id,
+                worker_id: worker.id,
+                compensation_type: sourceAssignment.compensation_type,
+                salary_expectation: sourceAssignment.salary_expectation,
+                commission_percentage: sourceAssignment.commission_percentage,
+              }
+            : {
+                ...defaultBookingWorkerAssignment("", worker.id, worker),
+                hire_id: hire.id,
+              });
+
+        return {
+          ...record,
+          worker,
+        };
+      });
 
       return {
         ...hire,
-        booking: sourceBooking ? hydrateBooking(sourceBooking) : null,
+        booking: hydratedBooking,
         workers: hydratedWorkers,
+        worker_assignments: workerAssignments,
         worker_count: hydratedWorkers.length,
       };
     })
@@ -1366,7 +1614,15 @@ async function getHiresFromSupabase(options?: {
   const [hireWorkersResult, bookingsFromDb, allWorkers] = await Promise.all([
     supabase
       .from("hire_workers")
-      .select("hire_id, worker_id")
+      .select(
+        [
+          "hire_id",
+          "worker_id",
+          "compensation_type",
+          "salary_expectation",
+          "commission_percentage",
+        ].join(", "),
+      )
       .in("hire_id", hireIds),
     Promise.all(
       bookingIds.map((bookingId) =>
@@ -1381,8 +1637,10 @@ async function getHiresFromSupabase(options?: {
   const bookingsById = new Map(bookingsFromDb.map((booking) => [booking.id, booking]));
   const workersById = new Map(allWorkers.map((worker) => [worker.id, worker]));
   const workerIdsByHire = new Map<string, string[]>();
+  const hireWorkerRows =
+    (hireWorkersResult.data ?? []) as unknown as SupabaseHireWorkerRow[];
 
-  ((hireWorkersResult.data ?? []) as SupabaseHireWorkerRow[]).forEach((item) => {
+  hireWorkerRows.forEach((item) => {
     workerIdsByHire.set(item.hire_id, [
       ...(workerIdsByHire.get(item.hire_id) ?? []),
       item.worker_id,
@@ -1397,6 +1655,35 @@ async function getHiresFromSupabase(options?: {
       const hydratedWorkers = workerIds
         .map((workerId) => workersById.get(workerId))
         .filter((worker): worker is Worker => Boolean(worker));
+      const bookingAssignmentsByWorker = new Map(
+        sourceBooking?.worker_assignments.map((assignment) => [
+          assignment.worker_id,
+          assignment,
+        ]) ?? [],
+      );
+      const rowAssignments = hireWorkerRows.filter((item) => item.hire_id === hire.id);
+      const workerAssignments = hydratedWorkers.map((worker) => {
+        const row = rowAssignments.find((item) => item.worker_id === worker.id);
+        const fallback = bookingAssignmentsByWorker.get(worker.id);
+        const record = row
+          ? normalizeHireWorkerAssignment(row, fallback, worker)
+          : {
+              hire_id: hire.id,
+              worker_id: worker.id,
+              compensation_type:
+                fallback?.compensation_type ?? defaultCompensationType(worker),
+              salary_expectation:
+                fallback?.salary_expectation ?? defaultSalaryExpectation(worker),
+              commission_percentage:
+                fallback?.commission_percentage ??
+                defaultCommissionPercentage(worker),
+            };
+
+        return {
+          ...record,
+          worker,
+        };
+      });
 
       return {
         id: hire.id,
@@ -1414,6 +1701,7 @@ async function getHiresFromSupabase(options?: {
         payment_reference: hire.payment_reference ?? "Verified manually",
         booking: sourceBooking,
         workers: hydratedWorkers,
+        worker_assignments: workerAssignments,
         worker_count: hydratedWorkers.length,
       } satisfies Hire;
     })
@@ -1531,7 +1819,6 @@ export function getAdminActivityLogs() {
 
 export function getDashboardMetrics(): DashboardMetric[] {
   const hydratedWorkers = getWorkers();
-  const hydratedAssignments = getStaffingAssignments();
   const hydratedBookings = getBookings();
 
   return [
@@ -1562,11 +1849,11 @@ export function getDashboardMetrics(): DashboardMetric[] {
       detail: "Bookings waiting on matching and manual worker availability checks.",
     },
     {
-      label: "Reserved workers",
+      label: "Payment locks",
       value: String(
-        hydratedAssignments.filter((assignment) => assignment.status === "reserved").length,
+        hydratedWorkers.filter((worker) => worker.availability_status === "reserved").length,
       ),
-      detail: "Workers secured for confirmed bookings and blocked from future matching.",
+      detail: "Workers temporarily locked after clients start deposit payment.",
     },
   ];
 }
@@ -1576,7 +1863,6 @@ export async function getDashboardMetricsAsync(): Promise<DashboardMetric[]> {
     getWorkersAsync(),
     getBookingsAsync(),
   ]);
-  const hydratedAssignments = getStaffingAssignments();
 
   return [
     {
@@ -1606,12 +1892,12 @@ export async function getDashboardMetricsAsync(): Promise<DashboardMetric[]> {
       detail: "Bookings waiting on matching and manual worker availability checks.",
     },
     {
-      label: "Reserved workers",
+      label: "Payment locks",
       value: String(
-        hydratedAssignments.filter((assignment) => assignment.status === "reserved")
+        hydratedWorkers.filter((worker) => worker.availability_status === "reserved")
           .length,
       ),
-      detail: "Workers secured for confirmed bookings and blocked from future matching.",
+      detail: "Workers temporarily locked after clients start deposit payment.",
     },
   ];
 }
