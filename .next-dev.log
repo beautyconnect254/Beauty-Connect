@@ -15,3 +15,4 @@ Creating turbopack project {
 ○ Compiling / ...
  GET / 200 in 203ms (next.js: 8ms, application-code: 195ms)
  GET / 200 in 176ms (next.js: 6ms, application-code: 170ms)
+  Reload env: .env

@@ -13,6 +13,7 @@ import {
   normalizeWorkerCapacityLimit,
 } from "@/lib/capacity-rules";
 import { createSupabaseServiceClient } from "@/lib/supabase/server";
+import type { PaymentInstructions } from "@/lib/types";
 
 interface RouteContext {
   params: Promise<{ id: string }>;
@@ -23,6 +24,7 @@ type AdminBookingPayload =
     action: "confirm";
     workerIds: string[];
     workerAssignments: AdminWorkerAssignmentPayload[];
+    platformFee: number | null;
   };
 
 interface AdminWorkerAssignmentPayload {
@@ -44,6 +46,19 @@ interface AdminBookingRow {
 
 function cleanText(value: unknown) {
   return typeof value === "string" ? value.trim() : "";
+}
+
+function isRecord(value: unknown): value is Record<string, unknown> {
+  return Boolean(value) && typeof value === "object" && !Array.isArray(value);
+}
+
+function normalizePlatformFee(value: unknown) {
+  const amount =
+    typeof value === "number"
+      ? value
+      : Number(cleanText(value).replace(/[^\d.]/g, ""));
+
+  return Number.isFinite(amount) && amount > 0 ? Math.round(amount) : null;
 }
 
 function parseWorkerAssignments(body: Record<string, unknown>) {
@@ -139,10 +154,23 @@ async function readPayload(request: NextRequest): Promise<AdminBookingPayload | 
       action: "confirm",
       workerIds,
       workerAssignments,
+      platformFee: normalizePlatformFee(body.platformFee),
     };
   }
 
   return null;
+}
+
+function existingPaymentInstructions(
+  value: unknown,
+  fallback: PaymentInstructions,
+): PaymentInstructions {
+  return isRecord(value)
+    ? ({
+        ...fallback,
+        ...value,
+      } as PaymentInstructions)
+    : fallback;
 }
 
 function errorResponse(message: string, status: number) {
@@ -287,6 +315,10 @@ export async function PATCH(request: NextRequest, context: RouteContext) {
       return errorResponse(assignmentError, 400);
     }
 
+    if (payload.platformFee === null) {
+      return errorResponse("Enter the global platform fee the client will pay.", 400);
+    }
+
     if (booking.type === "worker") {
       const { data: requestedWorkers, error: requestedWorkersError } =
         await supabase
@@ -336,13 +368,15 @@ export async function PATCH(request: NextRequest, context: RouteContext) {
       );
     }
 
-    const instructions =
-      booking.payment_instructions ??
-      defaultPaymentInstructions({
+    const fallbackInstructions = defaultPaymentInstructions({
         id: booking.id,
         type: booking.type === "team" ? "team" : "worker",
         worker_count: payload.workerIds.length,
       });
+    const instructions = {
+      ...existingPaymentInstructions(booking.payment_instructions, fallbackInstructions),
+      deposit_amount: payload.platformFee,
+    };
 
     const { error: updateError } = await supabase
       .from("bookings")

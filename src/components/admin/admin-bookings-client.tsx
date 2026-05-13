@@ -41,7 +41,7 @@ import type {
   TeamRequestRole,
   Worker,
 } from "@/lib/types";
-import { availabilityLabel, cn, totalHeadcount } from "@/lib/utils";
+import { availabilityLabel, cn, formatCurrency, totalHeadcount } from "@/lib/utils";
 
 interface AdminBookingsClientProps {
   initialBookings: Booking[];
@@ -190,6 +190,7 @@ async function persistAdminBookingAction(
       salaryExpectation: string;
       commissionPercentage: number | null;
     }>;
+    platformFee: number;
   },
 ) {
   const response = await fetch(`/api/admin/bookings/${bookingId}`, {
@@ -257,6 +258,48 @@ function initialCompensationState(bookings: Booking[]) {
   );
 }
 
+function defaultPlatformFeeDraft(booking: Booking) {
+  const instructions =
+    booking.payment_instructions ??
+    defaultPaymentInstructions({
+      id: booking.id,
+      type: booking.type,
+      worker_count: Math.max(booking.worker_count, 1),
+    });
+
+  return String(Math.round(Number(instructions.deposit_amount) || 0));
+}
+
+function initialPlatformFeeState(bookings: Booking[]) {
+  return bookings.reduce<Record<string, string>>((state, booking) => {
+    state[booking.id] = defaultPlatformFeeDraft(booking);
+
+    return state;
+  }, {});
+}
+
+function normalizePlatformFeeDraft(value: string) {
+  const amount = Number(value.replace(/[^\d.]/g, ""));
+
+  return Number.isFinite(amount) && amount > 0 ? Math.round(amount) : null;
+}
+
+function paymentInstructionsWithPlatformFee(
+  booking: Booking,
+  workerCount: number,
+  platformFee: number,
+) {
+  return {
+    ...defaultPaymentInstructions({
+      id: booking.id,
+      type: booking.type,
+      worker_count: Math.max(workerCount, 1),
+    }),
+    ...(booking.payment_instructions ?? {}),
+    deposit_amount: platformFee,
+  };
+}
+
 function findAssignment(booking: Booking, workerId: string) {
   return booking.worker_assignments.find(
     (assignment) => assignment.worker_id === workerId,
@@ -291,6 +334,9 @@ export function AdminBookingsClient({
   >({});
   const [compensations, setCompensations] = useState(() =>
     initialCompensationState(initialBookings),
+  );
+  const [platformFees, setPlatformFees] = useState(() =>
+    initialPlatformFeeState(initialBookings),
   );
   const [notice, setNotice] = useState("");
   const activeBooking =
@@ -444,6 +490,13 @@ export function AdminBookingsClient({
     };
   }
 
+  function updatePlatformFee(booking: Booking, value: string) {
+    setPlatformFees((current) => ({
+      ...current,
+      [booking.id]: value,
+    }));
+  }
+
   function assignmentRecordFromDraft(
     booking: Booking,
     worker: Worker,
@@ -473,9 +526,15 @@ export function AdminBookingsClient({
     const blockedWorker = confirmedWorkers.find(
       (worker) => workerConflict(worker, booking, bookings, capacityLimit) !== "",
     );
+    const platformFee = normalizePlatformFeeDraft(platformFees[booking.id] ?? "");
 
     if (confirmedWorkers.length === 0) {
       setNotice("Confirm at least one worker as available before moving the booking.");
+      return;
+    }
+
+    if (platformFee === null) {
+      setNotice("Enter the global platform fee the client will pay.");
       return;
     }
 
@@ -520,13 +579,11 @@ export function AdminBookingsClient({
                 worker,
               })),
               worker_count: confirmedWorkers.length,
-              payment_instructions:
-                item.payment_instructions ??
-                defaultPaymentInstructions({
-                  id: item.id,
-                  type: item.type,
-                  worker_count: confirmedWorkers.length,
-                }),
+              payment_instructions: paymentInstructionsWithPlatformFee(
+                item,
+                confirmedWorkers.length,
+                platformFee,
+              ),
               payment_verification: {
                 status: "not_submitted",
                 submitted_reference: null,
@@ -551,9 +608,10 @@ export function AdminBookingsClient({
         action: "confirm",
         workerIds: confirmedWorkerIds,
         workerAssignments,
+        platformFee,
       });
       setNotice(
-        `${booking.title} confirmed. Workers lock only when the client starts deposit payment.`,
+        `${booking.title} confirmed with ${formatCurrency(platformFee)} platform fee.`,
       );
     } catch (error) {
       setNotice(
@@ -779,7 +837,7 @@ export function AdminBookingsClient({
         </section>
 
         <section className="space-y-3">
-          <div className="flex items-center justify-between gap-3">
+          <div className="grid gap-3 lg:grid-cols-[minmax(0,1fr)_minmax(220px,300px)_auto] lg:items-end">
             <div>
               <p className="text-sm font-extrabold text-[color:var(--foreground)]">
                 {booking.type === "worker" ? "Requested Worker" : "Suggested Workers"}
@@ -789,6 +847,27 @@ export function AdminBookingsClient({
                   ? "Single bookings only use the exact worker requested by the client."
                   : "Auto-matched by role, sub-specialty, availability, and experience."}
               </p>
+            </div>
+            <div className="rounded-md border border-emerald-200 bg-emerald-50 p-2">
+              <label
+                htmlFor={`platform-fee-${booking.id}`}
+                className="text-[10px] font-extrabold uppercase text-emerald-900"
+              >
+                Platform fee client pays
+              </label>
+              <div className="mt-1 flex items-center gap-2">
+                <span className="rounded-md bg-white px-2 py-2 text-xs font-extrabold text-emerald-900">
+                  KSh
+                </span>
+                <Input
+                  id={`platform-fee-${booking.id}`}
+                  className="h-9 bg-white text-sm font-extrabold"
+                  inputMode="numeric"
+                  value={platformFees[booking.id] ?? ""}
+                  onChange={(event) => updatePlatformFee(booking, event.target.value)}
+                  placeholder="10000"
+                />
+              </div>
             </div>
             <Button onClick={() => void confirmBooking(booking)}>
               <ClipboardCheck className="h-4 w-4" />
