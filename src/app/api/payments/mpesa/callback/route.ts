@@ -50,6 +50,13 @@ function numericValue(value: unknown) {
   return Number.isFinite(number) ? number : null;
 }
 
+export async function GET() {
+  return NextResponse.json({
+    ok: true,
+    endpoint: "mpesa-callback",
+  });
+}
+
 export async function POST(request: Request) {
   const supabase = createSupabaseServiceClient();
 
@@ -105,6 +112,11 @@ export async function POST(request: Request) {
 
   if (error) {
     const status = error.message.includes("not found") ? 404 : 500;
+
+    console.error("M-Pesa callback processing failed", {
+      checkoutRequestId,
+      message: error.message,
+    });
 
     return NextResponse.json(
       { ResultCode: 1, ResultDesc: error.message },

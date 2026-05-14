@@ -27,7 +27,7 @@ export const FUTURE_BOOKING_STATUSES = [
   "cancelled",
 ] as const satisfies BookingStatus[];
 
-export const PAYMENT_LOCK_DURATION_MINUTES = 3;
+export const PAYMENT_LOCK_DURATION_MINUTES = 5;
 
 export const STAFFING_WORKFLOW_STEPS = [
   "Discover workers / build team",
@@ -36,7 +36,7 @@ export const STAFFING_WORKFLOW_STEPS = [
   "Availability review",
   "Confirmed",
   "Deposit payment starts",
-  "Workers locked for payment",
+  "Workers reserved for payment",
   "Payment verification",
   "Hired",
   "Worker contacts unlocked",
@@ -68,7 +68,7 @@ export function bookingStatusDescription(status: BookingStatus) {
     case "confirmed":
       return "Workers are selected. They lock only when deposit payment starts.";
     case "payment_pending":
-      return "Deposit payment is in progress. Workers are locked for a short payment window.";
+      return "Deposit payment is in progress. Workers are reserved while M-Pesa confirms.";
     case "paid":
       return "Payment is verified. Worker contacts are unlocked in Hires.";
     case "expired":
@@ -162,8 +162,8 @@ export function defaultPaymentInstructions(
     payment_reference: reference,
     notes:
       booking.type === "team"
-        ? "Start deposit payment when ready. Beauty Connect locks the whole team for 3 minutes while payment begins."
-        : "Start deposit payment when ready. Beauty Connect locks the worker for 3 minutes while payment begins.",
+        ? "Start deposit payment when ready. Beauty Connect reserves the whole team while M-Pesa confirms."
+        : "Start deposit payment when ready. Beauty Connect reserves the worker while M-Pesa confirms.",
   };
 }
 

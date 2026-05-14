@@ -88,7 +88,7 @@ function statusCopy(status: BookingStatus) {
     case "payment_pending":
       return {
         title: "Payment in progress",
-        body: "Workers are locked briefly while deposit payment starts.",
+        body: "Workers are reserved while M-Pesa confirms your deposit.",
         icon: Clock3,
       };
     case "paid":

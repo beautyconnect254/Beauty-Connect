@@ -30,18 +30,63 @@ function cleanEnv(name: string) {
   return process.env[name]?.trim() ?? "";
 }
 
+function defaultCallbackUrl() {
+  const appUrl = cleanEnv("NEXT_PUBLIC_APP_URL");
+
+  if (!appUrl) {
+    return "";
+  }
+
+  try {
+    return new URL("/api/payments/mpesa/callback", appUrl).toString();
+  } catch {
+    return "";
+  }
+}
+
+function validateCallbackUrl(value: string, environment: DarajaConfig["environment"]) {
+  let url: URL;
+
+  try {
+    url = new URL(value);
+  } catch {
+    throw new Error("DARAJA_CALLBACK_URL must be a valid absolute URL.");
+  }
+
+  if (url.protocol !== "https:") {
+    throw new Error("DARAJA_CALLBACK_URL must use HTTPS so Daraja can reach it.");
+  }
+
+  if (url.hostname.includes("vervel.app")) {
+    throw new Error(
+      "DARAJA_CALLBACK_URL looks misspelled: use vercel.app, not vervel.app.",
+    );
+  }
+
+  if (url.hostname === "localhost" || url.hostname === "127.0.0.1") {
+    throw new Error("DARAJA_CALLBACK_URL must be a public URL, not localhost.");
+  }
+
+  if (environment === "production" && url.hostname.includes("ngrok-free.app")) {
+    throw new Error("Use the live public app URL for production Daraja callbacks.");
+  }
+
+  return url.toString();
+}
+
 function darajaConfig(): DarajaConfig {
   const environmentValue = cleanEnv("DARAJA_ENV").toLowerCase();
   const environment =
     environmentValue === "production" || environmentValue === "live"
       ? "production"
       : "sandbox";
+  const callbackUrl = cleanEnv("DARAJA_CALLBACK_URL") || defaultCallbackUrl();
   const config = {
     consumerKey: cleanEnv("DARAJA_CONSUMER_KEY"),
     consumerSecret: cleanEnv("DARAJA_CONSUMER_SECRET"),
     shortcode: cleanEnv("DARAJA_SHORTCODE"),
     passkey: cleanEnv("DARAJA_PASSKEY"),
-    callbackUrl: cleanEnv("DARAJA_CALLBACK_URL"),
+    callbackUrl,
     environment,
   } satisfies DarajaConfig;
   const envNames = {
@@ -59,7 +104,10 @@ function darajaConfig(): DarajaConfig {
     throw new Error(`Missing Daraja environment variables: ${missing.join(", ")}.`);
   }
 
-  return config;
+  return {
+    ...config,
+    callbackUrl: validateCallbackUrl(config.callbackUrl, environment),
+  };
 }
 
 function baseUrl(environment: DarajaConfig["environment"]) {

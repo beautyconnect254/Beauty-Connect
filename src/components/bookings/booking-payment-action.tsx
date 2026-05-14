@@ -1,7 +1,7 @@
 "use client";
 
 import { useRouter } from "next/navigation";
-import { useState } from "react";
+import { useEffect, useState } from "react";
 import { format, parseISO } from "date-fns";
 import { Clock3, CreditCard } from "lucide-react";
 
@@ -49,6 +49,34 @@ export function BookingPaymentAction({
   const [loading, setLoading] = useState(false);
   const [notice, setNotice] = useState("");
   const [phoneNumber, setPhoneNumber] = useState(defaultPhone);
+  const paymentIsPending = status === "payment_pending";
+
+  useEffect(() => {
+    if (!paymentIsPending) {
+      return;
+    }
+
+    router.refresh();
+    const intervalId = window.setInterval(() => {
+      router.refresh();
+    }, 4000);
+    const expiresAt = lockExpiresAt ? new Date(lockExpiresAt).getTime() : 0;
+    const refreshAfterExpiryMs = expiresAt - Date.now() + 1000;
+    const timeoutId =
+      refreshAfterExpiryMs > 0
+        ? window.setTimeout(() => {
+            router.refresh();
+          }, refreshAfterExpiryMs)
+        : null;
+
+    return () => {
+      window.clearInterval(intervalId);
+
+      if (timeoutId) {
+        window.clearTimeout(timeoutId);
+      }
+    };
+  }, [lockExpiresAt, paymentIsPending, router]);
 
   async function startPayment() {
     setLoading(true);
@@ -82,17 +110,20 @@ export function BookingPaymentAction({
     }
   }
 
-  if (status === "payment_pending") {
+  if (paymentIsPending) {
     const expires = formatLockExpiry(lockExpiresAt);
 
     return (
-      <div className="rounded-md border border-purple-200 bg-purple-50 p-3 text-sm font-semibold text-purple-900">
-        <div className="flex items-center gap-2">
-          <Clock3 className="h-4 w-4" />
-          <span>
-            Payment in progress{expires ? ` until ${expires}` : ""}. Check your
-            phone for the M-Pesa prompt.
-          </span>
+      <div className="rounded-md border border-amber-200 bg-amber-50 p-3 text-sm font-semibold text-amber-950">
+        <div className="flex items-start gap-2">
+          <Clock3 className="mt-0.5 h-4 w-4 shrink-0" />
+          <div>
+            <p>Waiting for M-Pesa confirmation.</p>
+            <p className="mt-1 text-xs leading-5 text-amber-900">
+              Workers stay reserved while Daraja confirms payment
+              {expires ? `, with automatic release around ${expires} if it times out` : ""}.
+            </p>
+          </div>
         </div>
       </div>
     );
@@ -124,8 +155,8 @@ export function BookingPaymentAction({
         <p className="text-xs font-bold leading-5 text-emerald-950">{notice}</p>
       ) : (
         <p className="text-xs font-semibold leading-5 text-emerald-900">
-          Rechecks worker availability, locks the assignment for 3 minutes, then
-          sends an M-Pesa prompt.
+          Rechecks worker availability, reserves the assignment, then sends an
+          M-Pesa prompt.
         </p>
       )}
     </div>
