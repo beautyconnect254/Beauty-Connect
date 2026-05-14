@@ -5,7 +5,6 @@ import { ArrowLeft, CalendarDays, CreditCard, Users } from "lucide-react";
 
 import { ProtectedRouteGate } from "@/components/auth/protected-route-gate";
 import { BookingPaymentAction } from "@/components/bookings/booking-payment-action";
-import { PaymentInstructionsCard } from "@/components/bookings/payment-instructions-card";
 import {
   BookingStatusBadge,
   PaymentStatusBadge,
@@ -123,15 +122,12 @@ export default async function BookingDetailPage({ params }: BookingDetailPagePro
         </Card>
 
         {bookingRequiresPayment(booking) && booking.payment_instructions ? (
-          <div className="space-y-3">
-            <PaymentInstructionsCard instructions={booking.payment_instructions} />
-            <BookingPaymentAction
-              bookingId={booking.id}
-              status={booking.status}
-              lockExpiresAt={booking.payment_lock_expires_at}
-              defaultPhone={booking.request_details?.client?.contact_whatsapp ?? ""}
-            />
-          </div>
+          <BookingPaymentAction
+            bookingId={booking.id}
+            status={booking.status}
+            lockExpiresAt={booking.payment_lock_expires_at}
+            defaultPhone={booking.request_details?.client?.contact_whatsapp ?? ""}
+          />
         ) : null}
 
         <TrackingLinkCard trackingToken={booking.tracking_token} />

@@ -10,29 +10,35 @@ interface BookingsClientProps {
   bookings: Booking[];
 }
 
-const tabs: Array<{ value: BookingStatus; label: string }> = [
+type BookingFilterStatus = Extract<BookingStatus, "pending" | "confirmed" | "paid">;
+
+const tabs: Array<{ value: BookingFilterStatus; label: string }> = [
   { value: "pending", label: "Pending" },
   { value: "confirmed", label: "Confirmed" },
-  { value: "payment_pending", label: "Payment" },
   { value: "paid", label: "Paid" },
 ];
 
 const bookingTypes: Array<{ value: BookingType; label: string }> = [
-  { value: "team", label: "Team Bookings" },
-  { value: "worker", label: "Single Bookings" },
+  { value: "team", label: "Team Booking" },
+  { value: "worker", label: "Single Booking" },
 ];
 
 export function BookingsClient({ bookings }: BookingsClientProps) {
   const [activeType, setActiveType] = useState<BookingType>("team");
-  const [activeTab, setActiveTab] = useState<BookingStatus>("pending");
+  const [activeTab, setActiveTab] = useState<BookingFilterStatus>("pending");
   const allBookings = useMemo(() => bookings, [bookings]);
-  const visibleBookings = allBookings.filter(
-    (booking) => booking.type === activeType && booking.status === activeTab,
-  );
+  const visibleBookings = allBookings.filter((booking) => {
+    const matchesStatus =
+      activeTab === "confirmed"
+        ? booking.status === "confirmed" || booking.status === "payment_pending"
+        : booking.status === activeTab;
+
+    return booking.type === activeType && matchesStatus;
+  });
 
   return (
     <div className="space-y-3">
-      <div className="grid grid-cols-3 gap-1 rounded-lg border border-[color:var(--border)] bg-white p-1">
+      <div className="mx-auto flex w-fit max-w-full justify-center rounded-lg border border-[color:var(--border)] bg-white p-1">
         {bookingTypes.map((type) => {
           const count = allBookings.filter((booking) => booking.type === type.value).length;
           const active = activeType === type.value;
@@ -40,7 +46,7 @@ export function BookingsClient({ bookings }: BookingsClientProps) {
           return (
             <button
               className={cn(
-                "rounded-md px-3 py-2 text-xs font-extrabold transition",
+                "flex min-w-0 items-center gap-2 rounded-md px-3 py-1.5 text-xs font-extrabold transition sm:px-4",
                 active
                   ? "bg-[color:var(--foreground)] text-white"
                   : "text-[color:var(--muted-foreground)] hover:bg-[color:var(--muted)]",
@@ -49,23 +55,39 @@ export function BookingsClient({ bookings }: BookingsClientProps) {
               onClick={() => setActiveType(type.value)}
               type="button"
             >
-              {type.label} ({count})
+              <span className="whitespace-nowrap">{type.label}</span>
+              <span
+                className={cn(
+                  "rounded-full px-1.5 py-0.5 text-[10px] font-black",
+                  active
+                    ? "bg-white/20 text-white"
+                    : "bg-[color:var(--muted)] text-[color:var(--foreground)]",
+                )}
+              >
+                {count}
+              </span>
             </button>
           );
         })}
       </div>
 
-      <div className="grid grid-cols-2 gap-1 rounded-lg border border-[color:var(--border)] bg-white p-1 sm:grid-cols-4">
+      <div className="mx-auto flex w-fit max-w-full justify-center overflow-x-auto rounded-lg border border-[color:var(--border)] bg-white p-1">
         {tabs.map((tab) => {
-          const count = allBookings.filter(
-            (booking) => booking.type === activeType && booking.status === tab.value,
-          ).length;
+          const count = allBookings.filter((booking) => {
+            const matchesStatus =
+              tab.value === "confirmed"
+                ? booking.status === "confirmed" ||
+                  booking.status === "payment_pending"
+                : booking.status === tab.value;
+
+            return booking.type === activeType && matchesStatus;
+          }).length;
           const active = activeTab === tab.value;
 
           return (
             <button
               className={cn(
-                "rounded-md px-3 py-2 text-xs font-extrabold transition",
+                "flex items-center gap-2 rounded-md px-3 py-1.5 text-xs font-extrabold transition sm:px-4",
                 active
                   ? "bg-[linear-gradient(135deg,var(--primary),var(--accent))] text-white"
                   : "text-[color:var(--muted-foreground)] hover:bg-[color:var(--muted)]",
@@ -74,7 +96,17 @@ export function BookingsClient({ bookings }: BookingsClientProps) {
               onClick={() => setActiveTab(tab.value)}
               type="button"
             >
-              {tab.label} ({count})
+              <span className="whitespace-nowrap">{tab.label}</span>
+              <span
+                className={cn(
+                  "rounded-full px-1.5 py-0.5 text-[10px] font-black",
+                  active
+                    ? "bg-white/20 text-white"
+                    : "bg-[color:var(--muted)] text-[color:var(--foreground)]",
+                )}
+              >
+                {count}
+              </span>
             </button>
           );
         })}

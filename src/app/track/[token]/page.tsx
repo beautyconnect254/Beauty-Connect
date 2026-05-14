@@ -9,7 +9,6 @@ import {
 } from "lucide-react";
 
 import { BookingPaymentAction } from "@/components/bookings/booking-payment-action";
-import { PaymentInstructionsCard } from "@/components/bookings/payment-instructions-card";
 import { SiteShell } from "@/components/layout/site-shell";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
@@ -353,15 +352,12 @@ export default async function TrackBookingPage({ params }: TrackPageProps) {
         </Card>
 
         {(status === "confirmed" || status === "payment_pending") && instructions ? (
-          <div className="space-y-3">
-            <PaymentInstructionsCard instructions={instructions} />
-            <BookingPaymentAction
-              trackingToken={token}
-              status={status}
-              lockExpiresAt={booking.payment_lock_expires_at}
-              defaultPhone={details.client?.contact_whatsapp ?? ""}
-            />
-          </div>
+          <BookingPaymentAction
+            trackingToken={token}
+            status={status}
+            lockExpiresAt={booking.payment_lock_expires_at}
+            defaultPhone={details.client?.contact_whatsapp ?? ""}
+          />
         ) : null}
 
         {status !== "paid" ? (

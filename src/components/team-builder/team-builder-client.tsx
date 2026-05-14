@@ -6,10 +6,12 @@ import { format } from "date-fns";
 import { AnimatePresence, motion } from "framer-motion";
 import {
   CalendarDays,
+  ChevronDown,
   ChevronLeft,
   ChevronRight,
   Minus,
   Plus,
+  Search,
   Send,
   X,
 } from "lucide-react";
@@ -181,6 +183,8 @@ export function TeamBuilderClient({ roleCatalog }: TeamBuilderClientProps) {
   const [isSubmitting, setIsSubmitting] = useState(false);
   const [submission, setSubmission] = useState<BookingSubmissionResult | null>(null);
   const [submitError, setSubmitError] = useState("");
+  const [roleSearch, setRoleSearch] = useState("");
+  const [expandedRoleId, setExpandedRoleId] = useState<string | null>(null);
 
   useEffect(() => {
     queueMicrotask(() => {
@@ -190,6 +194,21 @@ export function TeamBuilderClient({ roleCatalog }: TeamBuilderClientProps) {
 
   const selectedRoles = roles.filter((item) => item.quantity > 0);
   const headcount = totalHeadcount(selectedRoles);
+  const filteredRoleCatalog = useMemo(() => {
+    const query = roleSearch.trim().toLowerCase();
+
+    if (!query) {
+      return roleCatalog;
+    }
+
+    return roleCatalog.filter(
+      (category) =>
+        category.role.toLowerCase().includes(query) ||
+        category.specialties.some((skill) =>
+          skill.name.toLowerCase().includes(query),
+        ),
+    );
+  }, [roleCatalog, roleSearch]);
 
   const summaryRoles = useMemo(
     () =>
@@ -469,11 +488,23 @@ export function TeamBuilderClient({ roleCatalog }: TeamBuilderClientProps) {
       {stepIndex === 1 ? (
         <div className="space-y-3">
           <Card>
-            <CardHeader className="p-3 sm:p-4">
-              <CardTitle className="text-base">Build Your Salon Team</CardTitle>
-              <p className="text-sm leading-5 text-[color:var(--muted-foreground)]">
-                Pick quantities first. Specialities are optional.
-              </p>
+            <CardHeader className="space-y-3 p-3 sm:p-4">
+              <div>
+                <CardTitle className="text-base">Build Your Salon Team</CardTitle>
+                <p className="mt-1 text-sm leading-5 text-[color:var(--muted-foreground)]">
+                  Search for a role or service, then tap a specialty to set quantity,
+                  experience, and sub-specialties.
+                </p>
+              </div>
+              <div className="relative">
+                <Search className="pointer-events-none absolute left-3 top-3 h-4 w-4 text-[color:var(--muted-foreground)]" />
+                <Input
+                  value={roleSearch}
+                  onChange={(event) => setRoleSearch(event.target.value)}
+                  placeholder="Search barber, braiding, wig installation..."
+                  className="pl-9"
+                />
+              </div>
             </CardHeader>
           </Card>
 
@@ -483,148 +514,198 @@ export function TeamBuilderClient({ roleCatalog }: TeamBuilderClientProps) {
             </p>
           ) : null}
 
-          <div className="grid gap-3 md:grid-cols-2">
-            {roleCatalog.map((category) => {
+          <div className="grid gap-3">
+            {filteredRoleCatalog.map((category) => {
               const roleDraft = roles.find((role) => role.role === category.role);
 
               if (!roleDraft) return null;
 
               const band = experienceBand(roleDraft);
+              const expanded = expandedRoleId === roleDraft.id;
+              const selectedSpecialties = category.specialties.filter((skill) =>
+                roleDraft.specialty_ids.includes(skill.id),
+              );
 
               return (
                 <Card key={category.role} className="overflow-hidden">
                   <CardContent className="space-y-3 p-3 sm:p-4">
-                    <div className="flex items-start justify-between gap-3">
-                      <h3 className="text-base font-extrabold leading-tight text-[color:var(--foreground)]">
-                        {category.role === "Hair Stylist" ? "Hairstylist" : category.role}
-                      </h3>
-                      <div className="flex items-center gap-2">
-                        <button
-                          type="button"
-                          className="flex h-8 w-8 items-center justify-center rounded-md border border-[color:var(--border)] bg-white"
-                          onClick={() =>
-                            updateRole(roleDraft.id, (current) => ({
-                              ...current,
-                              quantity: Math.max(0, current.quantity - 1),
-                            }))
-                          }
-                          aria-label={`Reduce ${category.role} quantity`}
-                        >
-                          <Minus className="h-4 w-4" />
-                        </button>
-                        <div className="w-10 text-center">
-                          <p className="text-[10px] font-bold uppercase text-[color:var(--muted-foreground)]">
-                            Qty
-                          </p>
-                          <p className="text-lg font-extrabold">{roleDraft.quantity}</p>
+                    <button
+                      type="button"
+                      onClick={() =>
+                        setExpandedRoleId((current) =>
+                          current === roleDraft.id ? null : roleDraft.id,
+                        )
+                      }
+                      className="flex w-full items-center justify-between gap-3 text-left"
+                      aria-expanded={expanded}
+                    >
+                      <div className="min-w-0">
+                        <h3 className="text-base font-extrabold leading-tight text-[color:var(--foreground)]">
+                          {category.role === "Hair Stylist"
+                            ? "Hairstylist"
+                            : category.role}
+                        </h3>
+                        <div className="mt-1 flex flex-wrap gap-1.5">
+                          <Badge variant={roleDraft.quantity > 0 ? "verified" : "outline"}>
+                            Qty {roleDraft.quantity}
+                          </Badge>
+                          <Badge variant="outline">
+                            {selectedSpecialties.length} sub-specialt
+                            {selectedSpecialties.length === 1 ? "y" : "ies"}
+                          </Badge>
+                          <Badge variant="outline">{experienceLabel(roleDraft)}</Badge>
                         </div>
-                        <button
-                          type="button"
-                          className="flex h-8 w-8 items-center justify-center rounded-md bg-[color:var(--primary)] text-white"
-                          onClick={() =>
-                            updateRole(roleDraft.id, (current) => ({
-                              ...current,
-                              quantity: current.quantity + 1,
-                            }))
-                          }
-                          aria-label={`Increase ${category.role} quantity`}
-                        >
-                          <Plus className="h-4 w-4" />
-                        </button>
                       </div>
-                    </div>
+                      <ChevronDown
+                        className={cn(
+                          "h-5 w-5 shrink-0 text-[color:var(--muted-foreground)] transition",
+                          expanded ? "rotate-180" : "",
+                        )}
+                      />
+                    </button>
 
-                    <div className="space-y-2">
-                      <p className="text-xs font-bold text-[color:var(--foreground)]">
-                        Optional Specialities
-                      </p>
-                      <div className="flex flex-wrap gap-1.5">
-                        {category.specialties.map((skill) => {
-                          const active = roleDraft.specialty_ids.includes(skill.id);
-
-                          return (
+                    {expanded ? (
+                      <div className="space-y-4 border-t border-[color:var(--border)] pt-3">
+                        <div className="flex items-center justify-between gap-3 rounded-md bg-[color:var(--muted)] p-2">
+                          <p className="text-xs font-extrabold text-[color:var(--foreground)]">
+                            Workers needed
+                          </p>
+                          <div className="flex items-center gap-2">
                             <button
-                              key={skill.id}
                               type="button"
+                              className="flex h-8 w-8 items-center justify-center rounded-md border border-[color:var(--border)] bg-white"
                               onClick={() =>
                                 updateRole(roleDraft.id, (current) => ({
                                   ...current,
-                                  specialty_ids: active
-                                    ? current.specialty_ids.filter((item) => item !== skill.id)
-                                    : [...current.specialty_ids, skill.id],
+                                  quantity: Math.max(0, current.quantity - 1),
                                 }))
                               }
+                              aria-label={`Reduce ${category.role} quantity`}
+                            >
+                              <Minus className="h-4 w-4" />
+                            </button>
+                            <div className="w-10 text-center">
+                              <p className="text-[10px] font-bold uppercase text-[color:var(--muted-foreground)]">
+                                Qty
+                              </p>
+                              <p className="text-lg font-extrabold">{roleDraft.quantity}</p>
+                            </div>
+                            <button
+                              type="button"
+                              className="flex h-8 w-8 items-center justify-center rounded-md bg-[color:var(--primary)] text-white"
+                              onClick={() =>
+                                updateRole(roleDraft.id, (current) => ({
+                                  ...current,
+                                  quantity: current.quantity + 1,
+                                }))
+                              }
+                              aria-label={`Increase ${category.role} quantity`}
+                            >
+                              <Plus className="h-4 w-4" />
+                            </button>
+                          </div>
+                        </div>
+
+                        <div className="space-y-2">
+                          <p className="text-xs font-bold text-[color:var(--foreground)]">
+                            Sub-Specialties
+                          </p>
+                          <div className="flex flex-wrap gap-1.5">
+                            {category.specialties.map((skill) => {
+                              const active = roleDraft.specialty_ids.includes(skill.id);
+
+                              return (
+                                <button
+                                  key={skill.id}
+                                  type="button"
+                                  onClick={() =>
+                                    updateRole(roleDraft.id, (current) => ({
+                                      ...current,
+                                      specialty_ids: active
+                                        ? current.specialty_ids.filter(
+                                            (item) => item !== skill.id,
+                                          )
+                                        : [...current.specialty_ids, skill.id],
+                                    }))
+                                  }
+                                  className={cn(
+                                    "rounded-full border px-2.5 py-1.5 text-xs font-bold transition",
+                                    active
+                                      ? "border-[color:var(--primary)] bg-[color:var(--primary)] text-white"
+                                      : "border-[color:var(--border)] bg-white text-[color:var(--foreground)]",
+                                  )}
+                                >
+                                  {skill.name}
+                                </button>
+                              );
+                            })}
+                          </div>
+                        </div>
+
+                        <div className="space-y-2">
+                          <div className="flex items-center justify-between gap-2">
+                            <p className="text-xs font-bold text-[color:var(--foreground)]">
+                              Minimum Experience
+                            </p>
+                            <span
                               className={cn(
-                                "rounded-full border px-2.5 py-1.5 text-xs font-bold transition",
-                                active
-                                  ? "border-[color:var(--primary)] bg-[color:var(--primary)] text-white"
-                                  : "border-[color:var(--border)] bg-white text-[color:var(--foreground)]",
+                                "rounded-full px-2 py-0.5 text-[10px] font-extrabold",
+                                band.className,
                               )}
                             >
-                              {skill.name}
-                            </button>
-                          );
-                        })}
+                              {band.label}
+                            </span>
+                          </div>
+                          <div className="grid grid-cols-[1fr_1fr] gap-2">
+                            <Select
+                              value={String(roleDraft.min_experience_amount)}
+                              onChange={(event) =>
+                                updateRole(roleDraft.id, (current) => ({
+                                  ...current,
+                                  min_experience_amount: Number(event.target.value),
+                                }))
+                              }
+                            >
+                              {[1, 3, 6, 12].map((month) => (
+                                <option key={`m-${month}`} value={month}>
+                                  {month}
+                                </option>
+                              ))}
+                            </Select>
+                            <Select
+                              value={roleDraft.min_experience_unit}
+                              onChange={(event) =>
+                                updateRole(roleDraft.id, (current) => ({
+                                  ...current,
+                                  min_experience_unit: event.target
+                                    .value as DraftRole["min_experience_unit"],
+                                  min_experience_amount:
+                                    event.target.value === "years" &&
+                                    current.min_experience_amount > 10
+                                      ? 1
+                                      : current.min_experience_amount,
+                                }))
+                              }
+                            >
+                              <option value="months">Months</option>
+                              <option value="years">Years</option>
+                            </Select>
+                          </div>
+                          <div className="h-1.5 overflow-hidden rounded-full bg-[color:var(--muted)]">
+                            <div className={cn("h-full rounded-full", band.bar)} />
+                          </div>
+                        </div>
                       </div>
-                    </div>
-
-                    <div className="space-y-2">
-                      <div className="flex items-center justify-between gap-2">
-                        <p className="text-xs font-bold text-[color:var(--foreground)]">
-                          Minimum Experience
-                        </p>
-                        <span
-                          className={cn(
-                            "rounded-full px-2 py-0.5 text-[10px] font-extrabold",
-                            band.className,
-                          )}
-                        >
-                          {band.label}
-                        </span>
-                      </div>
-                      <div className="grid grid-cols-[1fr_1fr] gap-2">
-                        <Select
-                          value={String(roleDraft.min_experience_amount)}
-                          onChange={(event) =>
-                            updateRole(roleDraft.id, (current) => ({
-                              ...current,
-                              min_experience_amount: Number(event.target.value),
-                            }))
-                          }
-                        >
-                          {[1, 3, 6, 12].map((month) => (
-                            <option key={`m-${month}`} value={month}>
-                              {month}
-                            </option>
-                          ))}
-                        </Select>
-                        <Select
-                          value={roleDraft.min_experience_unit}
-                          onChange={(event) =>
-                            updateRole(roleDraft.id, (current) => ({
-                              ...current,
-                              min_experience_unit: event.target
-                                .value as DraftRole["min_experience_unit"],
-                              min_experience_amount:
-                                event.target.value === "years" &&
-                                current.min_experience_amount > 10
-                                  ? 1
-                                  : current.min_experience_amount,
-                            }))
-                          }
-                        >
-                          <option value="months">Months</option>
-                          <option value="years">Years</option>
-                        </Select>
-                      </div>
-                      <div className="h-1.5 overflow-hidden rounded-full bg-[color:var(--muted)]">
-                        <div className={cn("h-full rounded-full", band.bar)} />
-                      </div>
-                    </div>
+                    ) : null}
                   </CardContent>
                 </Card>
               );
             })}
+            {filteredRoleCatalog.length === 0 ? (
+              <div className="rounded-md border border-dashed border-[color:var(--border)] bg-white p-4 text-sm font-semibold text-[color:var(--muted-foreground)]">
+                No roles or sub-specialties match that search.
+              </div>
+            ) : null}
           </div>
         </div>
       ) : null}
