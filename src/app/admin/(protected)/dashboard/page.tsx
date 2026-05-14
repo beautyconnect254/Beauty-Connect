@@ -307,10 +307,10 @@ function buildAvailability(workers: Worker[]): AvailabilityPoint[] {
   const hidden = Math.max(workers.length - paymentLocked - hired - available, 0);
 
   return [
-    { name: "Available", value: available, color: "#059669" },
-    { name: "Payment Locked", value: paymentLocked, color: "#6d28d9" },
-    { name: "Hired", value: hired, color: "#0f766e" },
-    { name: "Hidden", value: hidden, color: "#94a3b8" },
+    { name: "Available", value: available, color: "#16a34a" },
+    { name: "Payment Locked", value: paymentLocked, color: "#f97316" },
+    { name: "Hired", value: hired, color: "#2563eb" },
+    { name: "Hidden", value: hidden, color: "#64748b" },
   ];
 }
 
@@ -364,12 +364,14 @@ function buildActivityFeed(
     .slice(0, 10);
 }
 
-function KpiCard({ item }: { item: KpiItem }) {
+function KpiCard({ item, flat = false }: { item: KpiItem; flat?: boolean }) {
   return (
     <div
       className={cn(
-        "rounded-lg border border-[color:var(--border)] bg-gradient-to-br p-3 shadow-sm ring-1",
-        toneClasses(item.tone),
+        "rounded-lg border border-[color:var(--border)] p-3 shadow-sm",
+        flat
+          ? "bg-white"
+          : cn("bg-gradient-to-br ring-1", toneClasses(item.tone)),
       )}
     >
       <div className="flex items-start justify-between gap-3">
@@ -388,7 +390,15 @@ function KpiCard({ item }: { item: KpiItem }) {
   );
 }
 
-function KpiSection({ title, items }: { title: string; items: KpiItem[] }) {
+function KpiSection({
+  title,
+  items,
+  flat = false,
+}: {
+  title: string;
+  items: KpiItem[];
+  flat?: boolean;
+}) {
   return (
     <section className="space-y-2">
       <div className="flex items-center justify-between gap-3">
@@ -398,7 +408,7 @@ function KpiSection({ title, items }: { title: string; items: KpiItem[] }) {
       </div>
       <div className="grid gap-3 md:grid-cols-2 xl:grid-cols-4">
         {items.map((item) => (
-          <KpiCard key={item.label} item={item} />
+          <KpiCard key={item.label} item={item} flat={flat} />
         ))}
       </div>
     </section>
@@ -594,9 +604,9 @@ export default async function AdminDashboardPage() {
         </div>
       </div>
 
-      <KpiSection title="Marketplace Metrics" items={marketplaceMetrics} />
+      <KpiSection title="Marketplace Metrics" items={marketplaceMetrics} flat />
       <KpiSection title="Worker Metrics" items={workerMetrics} />
-      <KpiSection title="Booking Metrics" items={bookingMetrics} />
+      <KpiSection title="Booking Metrics" items={bookingMetrics} flat />
 
       <AdminDashboardCharts
         bookingActivity={bookingActivity}

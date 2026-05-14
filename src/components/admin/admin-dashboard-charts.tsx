@@ -64,6 +64,25 @@ const tooltipStyle = {
   fontSize: 12,
 };
 
+const chartColors = {
+  bookings: "#2563eb",
+  confirmed: "#f97316",
+  paid: "#16a34a",
+  activeUsers: "#0891b2",
+  signups: "#e11d48",
+};
+
+const barPalette = [
+  "#2563eb",
+  "#f97316",
+  "#16a34a",
+  "#e11d48",
+  "#7c3aed",
+  "#ca8a04",
+  "#0891b2",
+  "#db2777",
+];
+
 export function AdminDashboardCharts({
   bookingActivity,
   specialtyPerformance,
@@ -81,12 +100,16 @@ export function AdminDashboardCharts({
             <AreaChart data={bookingActivity} margin={{ top: 8, right: 8, left: -20, bottom: 0 }}>
               <defs>
                 <linearGradient id="bookingFill" x1="0" x2="0" y1="0" y2="1">
-                  <stop offset="5%" stopColor="#6d28d9" stopOpacity={0.26} />
-                  <stop offset="95%" stopColor="#6d28d9" stopOpacity={0.02} />
+                  <stop offset="5%" stopColor={chartColors.bookings} stopOpacity={0.3} />
+                  <stop offset="95%" stopColor={chartColors.bookings} stopOpacity={0.03} />
+                </linearGradient>
+                <linearGradient id="confirmedFill" x1="0" x2="0" y1="0" y2="1">
+                  <stop offset="5%" stopColor={chartColors.confirmed} stopOpacity={0.24} />
+                  <stop offset="95%" stopColor={chartColors.confirmed} stopOpacity={0.02} />
                 </linearGradient>
                 <linearGradient id="paidFill" x1="0" x2="0" y1="0" y2="1">
-                  <stop offset="5%" stopColor="#059669" stopOpacity={0.24} />
-                  <stop offset="95%" stopColor="#059669" stopOpacity={0.02} />
+                  <stop offset="5%" stopColor={chartColors.paid} stopOpacity={0.24} />
+                  <stop offset="95%" stopColor={chartColors.paid} stopOpacity={0.02} />
                 </linearGradient>
               </defs>
               <CartesianGrid stroke="rgba(48, 36, 82, 0.08)" vertical={false} />
@@ -98,7 +121,7 @@ export function AdminDashboardCharts({
                 type="monotone"
                 dataKey="bookings"
                 name="Daily bookings"
-                stroke="#6d28d9"
+                stroke={chartColors.bookings}
                 strokeWidth={2}
                 fill="url(#bookingFill)"
               />
@@ -106,15 +129,15 @@ export function AdminDashboardCharts({
                 type="monotone"
                 dataKey="confirmed"
                 name="Confirmed"
-                stroke="#7c3aed"
+                stroke={chartColors.confirmed}
                 strokeWidth={2}
-                fill="transparent"
+                fill="url(#confirmedFill)"
               />
               <Area
                 type="monotone"
                 dataKey="paid"
                 name="Paid hires"
-                stroke="#059669"
+                stroke={chartColors.paid}
                 strokeWidth={2}
                 fill="url(#paidFill)"
               />
@@ -149,7 +172,7 @@ export function AdminDashboardCharts({
                 {specialtyPerformance.map((entry, index) => (
                   <Cell
                     key={entry.specialty}
-                    fill={index < 3 ? "#6d28d9" : index < 6 ? "#059669" : "#94a3b8"}
+                    fill={barPalette[index % barPalette.length]}
                   />
                 ))}
               </Bar>
@@ -215,7 +238,7 @@ export function AdminDashboardCharts({
                 type="monotone"
                 dataKey="activeUsers"
                 name="Daily active users"
-                stroke="#6d28d9"
+                stroke={chartColors.activeUsers}
                 strokeWidth={2.5}
                 dot={false}
               />
@@ -223,7 +246,7 @@ export function AdminDashboardCharts({
                 type="monotone"
                 dataKey="signups"
                 name="Signups"
-                stroke="#059669"
+                stroke={chartColors.signups}
                 strokeWidth={2.5}
                 dot={false}
               />
