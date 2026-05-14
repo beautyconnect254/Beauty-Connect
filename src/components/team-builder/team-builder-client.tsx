@@ -490,7 +490,7 @@ export function TeamBuilderClient({ roleCatalog }: TeamBuilderClientProps) {
           <Card>
             <CardHeader className="space-y-3 p-3 sm:p-4">
               <div>
-                <CardTitle className="text-base">Build Your Salon Team</CardTitle>
+                <CardTitle className="text-base">Search</CardTitle>
                 <p className="mt-1 text-sm leading-5 text-[color:var(--muted-foreground)]">
                   Search for a role or service, then tap a specialty to set quantity,
                   experience, and sub-specialties.

@@ -16,8 +16,8 @@ export default async function HiresPage() {
       <div className="mx-auto w-full max-w-5xl space-y-4 px-3 py-5 sm:px-6 lg:px-8 lg:py-8">
         <PageIntro
           eyebrow="Hires"
-          title="Paid Active Hires"
-          description="Paid worker and team hires with contact actions unlocked."
+          title="Booked Workers"
+          description="This is a list of all your booked workers, contact each other for detailed info."
         />
 
         {!user ? (
