@@ -825,6 +825,16 @@ insert into public.admin_settings (key, value)
 values ('max_active_bookings_per_worker', '1'::jsonb)
 on conflict (key) do nothing;
 
+create table if not exists public.site_visits (
+  id uuid primary key default gen_random_uuid(),
+  user_id uuid references auth.users(id) on delete set null,
+  session_id text not null,
+  path text not null default '/',
+  referrer text not null default '',
+  user_agent text not null default '',
+  created_at timestamptz not null default now()
+);
+
 create table if not exists public.admin_notes (
   id text primary key,
   worker_id text references public.workers(id) on delete cascade,
@@ -886,6 +896,9 @@ create index if not exists staffing_assignments_request_idx on public.staffing_a
 create index if not exists staffing_assignments_worker_idx on public.staffing_assignments (worker_id);
 create index if not exists admin_email_whitelist_active_idx on public.admin_email_whitelist (active);
 create index if not exists admin_settings_updated_idx on public.admin_settings (updated_at);
+create index if not exists site_visits_created_idx on public.site_visits (created_at);
+create index if not exists site_visits_session_idx on public.site_visits (session_id);
+create index if not exists site_visits_user_idx on public.site_visits (user_id);
 create index if not exists admin_notes_worker_idx on public.admin_notes (worker_id);
 create index if not exists admin_notes_team_request_idx on public.admin_notes (team_request_id);
 create index if not exists admin_notes_assignment_idx on public.admin_notes (staffing_assignment_id);

@@ -18,6 +18,7 @@ import { Select } from "@/components/ui/select";
 import { activeBookingCountLabel } from "@/lib/capacity-rules";
 import {
   bookingLocksWorkers,
+  bookingStatusLabel,
   compensationSummary,
   defaultCommissionPercentage,
   defaultCompensationType,
@@ -48,6 +49,9 @@ interface AdminBookingsClientProps {
   initialWorkers: Worker[];
   initialActivityLogs: AdminActivityLogRecord[];
   status: Extract<BookingStatus, "pending" | "confirmed" | "payment_pending" | "paid">;
+  statusFilter?: Array<
+    Extract<BookingStatus, "pending" | "confirmed" | "payment_pending" | "paid">
+  >;
   type: BookingType;
   capacityLimit: number;
 }
@@ -311,6 +315,7 @@ export function AdminBookingsClient({
   initialWorkers,
   initialActivityLogs,
   status,
+  statusFilter,
   type,
   capacityLimit,
 }: AdminBookingsClientProps) {
@@ -320,13 +325,18 @@ export function AdminBookingsClient({
   const visibleBookings = useMemo(
     () =>
       bookings
-        .filter((booking) => booking.status === status && booking.type === type)
+        .filter(
+          (booking) =>
+            (statusFilter ?? [status]).includes(
+              booking.status as AdminBookingsClientProps["status"],
+            ) && booking.type === type,
+        )
         .sort(
           (left, right) =>
             new Date(right.submitted_at).getTime() -
             new Date(left.submitted_at).getTime(),
         ),
-    [bookings, status, type],
+    [bookings, status, statusFilter, type],
   );
   const [selectedId, setSelectedId] = useState(visibleBookings[0]?.id ?? "");
   const [verification, setVerificationState] = useState<
@@ -1143,7 +1153,16 @@ export function AdminBookingsClient({
                     {booking.worker_count} worker{booking.worker_count === 1 ? "" : "s"}
                   </p>
                 </div>
-                <Badge variant="outline">{booking.type === "team" ? "Team" : "Single"}</Badge>
+                <div className="flex flex-col items-end gap-1">
+                  <Badge variant="outline">
+                    {booking.type === "team" ? "Team" : "Single"}
+                  </Badge>
+                  {booking.status !== status ? (
+                    <Badge variant="pending">
+                      {bookingStatusLabel(booking.status)}
+                    </Badge>
+                  ) : null}
+                </div>
               </div>
             </button>
           ))}
@@ -1167,7 +1186,7 @@ export function AdminBookingsClient({
                 </p>
               </div>
               <div className="flex flex-wrap gap-2">
-                <Badge variant="outline">{statusTitle(status)}</Badge>
+                <Badge variant="outline">{bookingStatusLabel(activeBooking.status)}</Badge>
                 <Badge variant="outline">{typeTitle(type)}</Badge>
               </div>
             </div>

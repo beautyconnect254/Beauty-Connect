@@ -17,6 +17,7 @@ import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Input } from "@/components/ui/input";
 import { Select } from "@/components/ui/select";
 import { Textarea } from "@/components/ui/textarea";
+import { WorkerSpecialtySelector } from "@/components/admin/worker-specialty-selector";
 import { activeBookingCountLabel } from "@/lib/capacity-rules";
 import {
   experienceYearsFromMonths,
@@ -26,7 +27,7 @@ import {
 } from "@/lib/experience";
 import { compressImageFile } from "@/lib/image-compression";
 import type { RoleSpecialtyCatalog, Worker, WorkerRole } from "@/lib/types";
-import { availabilityLabel, cn } from "@/lib/utils";
+import { availabilityLabel } from "@/lib/utils";
 import { WORKER_MEDIA_MAX_FILES_PER_UPLOAD } from "@/lib/worker-media";
 
 interface AdminWorkerOnboardingClientProps {
@@ -99,10 +100,9 @@ export function AdminWorkerOnboardingClient({
   const [uploadingCatalog, setUploadingCatalog] = useState(false);
   const [savingWorker, setSavingWorker] = useState(false);
   const roles = useMemo(() => roleCatalog.map((role) => role.role), [roleCatalog]);
-  const skillsForRole = useMemo(
-    () =>
-      roleCatalog.find((role) => role.role === draft.primary_role)?.specialties ?? [],
-    [draft.primary_role, roleCatalog],
+  const allSpecialties = useMemo(
+    () => roleCatalog.flatMap((role) => role.specialties),
+    [roleCatalog],
   );
   const completion = draftScore(draft);
   const portfolioUrls = draft.portfolio_urls
@@ -270,7 +270,7 @@ export function AdminWorkerOnboardingClient({
     }
 
     const allPortfolioImages = portfolioUrls;
-    const selectedSkills = skillsForRole.filter((skill) =>
+    const selectedSkills = allSpecialties.filter((skill) =>
       draft.selected_skill_ids.includes(skill.id),
     );
 
@@ -428,7 +428,7 @@ export function AdminWorkerOnboardingClient({
             </div>
             <div className="space-y-1.5">
               <label className="text-xs font-extrabold text-[color:var(--foreground)]">
-                Main Role
+                Primary Specialty
               </label>
               <Select
                 value={draft.primary_role}
@@ -436,7 +436,6 @@ export function AdminWorkerOnboardingClient({
                   setDraft((current) => ({
                     ...current,
                     primary_role: event.target.value,
-                    selected_skill_ids: [],
                   }))
                 }
               >
@@ -488,35 +487,13 @@ export function AdminWorkerOnboardingClient({
             <div className="space-y-4">
               <div className="space-y-1.5">
                 <label className="text-xs font-extrabold text-[color:var(--foreground)]">
-                  Sub-Specialties
+                  Specialties & Sub-Specialties
                 </label>
-                <div className="flex flex-wrap gap-2 rounded-md border border-[color:var(--border)] bg-white p-3">
-                  {skillsForRole.length > 0 ? (
-                    skillsForRole.map((skill) => {
-                      const active = draft.selected_skill_ids.includes(skill.id);
-
-                      return (
-                        <button
-                          type="button"
-                          key={skill.id}
-                          onClick={() => toggleSkill(skill.id)}
-                          className={cn(
-                            "rounded-full border px-3 py-1.5 text-xs font-extrabold transition",
-                            active
-                              ? "border-[color:var(--foreground)] bg-[color:var(--foreground)] text-white"
-                              : "border-[color:var(--border)] text-[color:var(--foreground)] hover:bg-[color:var(--muted)]",
-                          )}
-                        >
-                          {skill.name}
-                        </button>
-                      );
-                    })
-                  ) : (
-                    <p className="text-sm text-[color:var(--muted-foreground)]">
-                      Add sub-specialties for this role in Specialties first.
-                    </p>
-                  )}
-                </div>
+                <WorkerSpecialtySelector
+                  roleCatalog={roleCatalog}
+                  selectedSkillIds={draft.selected_skill_ids}
+                  onToggleSkill={toggleSkill}
+                />
               </div>
 
               <div className="space-y-1.5">

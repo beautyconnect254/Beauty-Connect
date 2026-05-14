@@ -47,34 +47,9 @@ const navGroups = [
   {
     label: "Bookings",
     items: [
-      { href: "/admin/bookings/pending/team", label: "Pending Team", icon: Clock3 },
-      { href: "/admin/bookings/pending/single", label: "Pending Single", icon: Clock3 },
-      {
-        href: "/admin/bookings/confirmed/team",
-        label: "Confirmed Team",
-        icon: CalendarCheck2,
-      },
-      {
-        href: "/admin/bookings/confirmed/single",
-        label: "Confirmed Single",
-        icon: CalendarCheck2,
-      },
-      {
-        href: "/admin/bookings/payment-pending/team",
-        label: "Payment Team",
-        icon: CalendarCheck2,
-      },
-      {
-        href: "/admin/bookings/payment-pending/single",
-        label: "Payment Single",
-        icon: CalendarCheck2,
-      },
-      { href: "/admin/bookings/paid/team", label: "Paid Team", icon: BriefcaseBusiness },
-      {
-        href: "/admin/bookings/paid/single",
-        label: "Paid Single",
-        icon: BriefcaseBusiness,
-      },
+      { href: "/admin/bookings/pending", label: "Pending", icon: Clock3 },
+      { href: "/admin/bookings/confirmed", label: "Confirmed", icon: CalendarCheck2 },
+      { href: "/admin/bookings/paid", label: "Paid", icon: BriefcaseBusiness },
     ],
   },
   {

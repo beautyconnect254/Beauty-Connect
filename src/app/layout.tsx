@@ -1,6 +1,7 @@
 import type { Metadata } from "next";
 import { Manrope } from "next/font/google";
 
+import { VisitTracker } from "@/components/analytics/visit-tracker";
 import { AuthProvider } from "@/components/auth/auth-provider";
 import "./globals.css";
 
@@ -29,7 +30,10 @@ export default function RootLayout({
       className={`${bodyFont.variable} h-full scroll-smooth antialiased`}
     >
       <body className="flex min-h-full flex-col bg-background text-foreground">
-        <AuthProvider>{children}</AuthProvider>
+        <AuthProvider>
+          {children}
+          <VisitTracker />
+        </AuthProvider>
       </body>
     </html>
   );

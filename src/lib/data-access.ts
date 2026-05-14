@@ -40,6 +40,7 @@ import {
   createSupabaseServiceClient,
 } from "@/lib/supabase/server";
 import type {
+  AdminActivityLogRecord,
   AvailabilityStatus,
   Booking,
   BookingRecord,
@@ -1812,6 +1813,51 @@ export function getStaffingAssignments() {
 
 export function getAdminActivityLogs() {
   return [...adminActivityLogs].sort(
+    (left, right) =>
+      new Date(right.created_at).getTime() - new Date(left.created_at).getTime(),
+  );
+}
+
+async function getAdminActivityLogsFromSupabase(): Promise<AdminActivityLogRecord[]> {
+  const supabase = getReadableSupabaseClient();
+
+  if (!supabase) {
+    return [];
+  }
+
+  const { data, error } = await supabase
+    .from("admin_activity_logs")
+    .select("id, type, actor, message, booking_id, worker_id, created_at")
+    .order("created_at", { ascending: false })
+    .limit(50);
+
+  if (error || !data) {
+    return [];
+  }
+
+  return data.map((log) => ({
+    id: log.id,
+    type: pickEnumValue(
+      log.type,
+      [
+        "booking_confirmed",
+        "worker_reserved",
+        "payment_confirmed",
+        "worker_released",
+        "worker_status_updated",
+      ] as const,
+      "worker_status_updated",
+    ),
+    actor: log.actor,
+    message: log.message,
+    booking_id: log.booking_id,
+    worker_id: log.worker_id,
+    created_at: log.created_at,
+  }));
+}
+
+export async function getAdminActivityLogsAsync() {
+  return mergeById(await getAdminActivityLogsFromSupabase(), getAdminActivityLogs()).sort(
     (left, right) =>
       new Date(right.created_at).getTime() - new Date(left.created_at).getTime(),
   );
