@@ -31,18 +31,21 @@ const preferredRoles: WorkerRole[] = [
 const process = [
   {
     step: "1",
-    title: "We Verify Workers",
-    description: "Every worker is checked before being listed.",
+    title: "Discover Verified Talent",
+    description:
+      "Every worker is reviewed before joining the platform, so you hire with confidence.",
   },
   {
     step: "2",
-    title: "Build Your Team",
-    description: "Choose the workers and experience level you need.",
+    title: "Hire Your Way",
+    description:
+      "Book a single specialist or build your full salon team in minutes.",
   },
   {
     step: "3",
-    title: "Hire & Get Started",
-    description: "Confirm your booking and start building your salon team.",
+    title: "Confirm & Get Started",
+    description:
+      "We match, confirm, and connect you with ready-to-work professionals fast.",
   },
 ];
 

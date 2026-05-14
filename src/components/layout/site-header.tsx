@@ -1,8 +1,9 @@
 "use client";
 
+import Image from "next/image";
 import Link from "next/link";
 import { usePathname } from "next/navigation";
-import { LogOut, Scissors, UserCircle } from "lucide-react";
+import { LogOut, UserCircle } from "lucide-react";
 import { useState } from "react";
 
 import { ProtectedLink } from "@/components/auth/protected-link";
@@ -26,8 +27,15 @@ export function SiteHeader() {
     <header className="sticky top-0 z-50 border-b border-[color:var(--border)] bg-white/95 backdrop-blur">
       <div className="mx-auto flex w-full max-w-7xl items-center justify-between gap-3 px-3 py-2.5 sm:px-6 lg:px-8">
         <Link href="/" className="flex min-w-0 items-center gap-2.5">
-          <div className="flex h-9 w-9 shrink-0 items-center justify-center rounded-md bg-[linear-gradient(135deg,var(--primary),var(--accent))] text-white">
-            <Scissors className="h-4 w-4" />
+          <div className="relative h-9 w-9 shrink-0 overflow-hidden rounded-md bg-white">
+            <Image
+              src="/brand/logo.png"
+              alt="Beauty Connect logo"
+              fill
+              priority
+              sizes="36px"
+              className="object-contain"
+            />
           </div>
           <div className="min-w-0">
             <p className="truncate text-base font-extrabold leading-tight text-[color:var(--foreground)]">
