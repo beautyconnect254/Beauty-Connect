@@ -461,19 +461,19 @@ export default async function AdminDashboardPage() {
     {
       label: "Total Website Visits",
       value: formatNumber(visitMetrics.totalVisits),
-      detail: "Tracked first-party page views.",
+      detail: "All Website Guests .",
       tone: "purple",
     },
     {
       label: "Registered Users",
       value: formatNumber(totalUsers),
-      detail: "Supabase auth accounts.",
+      detail: "Confirmed Users.",
       tone: "emerald",
     },
     {
       label: "Active Users Today",
       value: formatNumber(activeUsersToday),
-      detail: "Unique users or sessions today.",
+      detail: "Total daily website users.",
       tone: "amber",
     },
     {
@@ -487,13 +487,13 @@ export default async function AdminDashboardPage() {
     {
       label: "Total Workers",
       value: formatNumber(workers.length),
-      detail: "Complete admin roster.",
+      detail: "All Workers.",
       tone: "purple",
     },
     {
       label: "Active Listings",
       value: formatNumber(activeListings),
-      detail: "Verified and visible.",
+      detail: "Visible workers.",
       tone: "emerald",
     },
     {
@@ -568,7 +568,7 @@ export default async function AdminDashboardPage() {
             </div>
             <div>
               <p className="text-sm font-black text-[color:var(--foreground)]">
-                Marketplace Pulse
+                Marketplace Dashboard
               </p>
               <p className="text-xs font-semibold text-[color:var(--muted-foreground)]">
                 {format(new Date(), "MMM d, yyyy")} snapshot
@@ -605,7 +605,7 @@ export default async function AdminDashboardPage() {
       </div>
 
       <KpiSection title="Marketplace Metrics" items={marketplaceMetrics} flat />
-      <KpiSection title="Worker Metrics" items={workerMetrics} />
+      <KpiSection title="Worker Metrics" items={workerMetrics} flat />
       <KpiSection title="Booking Metrics" items={bookingMetrics} flat />
 
       <AdminDashboardCharts
