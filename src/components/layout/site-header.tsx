@@ -12,7 +12,7 @@ import {
   ShieldCheck,
   UserCircle,
 } from "lucide-react";
-import { useState } from "react";
+import { useEffect, useRef, useState } from "react";
 
 import { ProtectedLink } from "@/components/auth/protected-link";
 import { useAuth } from "@/components/auth/auth-provider";
@@ -36,8 +36,35 @@ const utilityLinks = [
 export function SiteHeader() {
   const pathname = usePathname();
   const { loading, openAuthModal, signOut, user } = useAuth();
+  const menuRef = useRef<HTMLDivElement>(null);
   const [profileOpen, setProfileOpen] = useState(false);
   const [utilityOpen, setUtilityOpen] = useState(false);
+  const anyMenuOpen = profileOpen || utilityOpen;
+
+  useEffect(() => {
+    if (!anyMenuOpen) {
+      return;
+    }
+
+    function handlePointerDown(event: PointerEvent) {
+      const target = event.target;
+
+      if (
+        target instanceof Node &&
+        menuRef.current &&
+        !menuRef.current.contains(target)
+      ) {
+        setProfileOpen(false);
+        setUtilityOpen(false);
+      }
+    }
+
+    window.addEventListener("pointerdown", handlePointerDown);
+
+    return () => {
+      window.removeEventListener("pointerdown", handlePointerDown);
+    };
+  }, [anyMenuOpen]);
 
   return (
     <header className="sticky top-0 z-50 border-b border-[color:var(--border)] bg-white/95 backdrop-blur">
@@ -99,7 +126,10 @@ export function SiteHeader() {
           })}
         </nav>
 
-        <div className="relative flex shrink-0 items-center gap-2">
+        <div
+          className="relative flex shrink-0 items-center gap-2"
+          ref={menuRef}
+        >
           <ProtectedLink
             href="/team-builder"
             intentTitle="Sign in to build your team"

@@ -1,6 +1,6 @@
 "use client";
 
-import type { FormEvent } from "react";
+import type { FormEvent, MouseEvent } from "react";
 import { useState } from "react";
 import { AnimatePresence, motion } from "framer-motion";
 import { Loader2, LogIn, Mail, X } from "lucide-react";
@@ -51,6 +51,10 @@ export function AuthModal({
     await onEmailSignIn(normalizedEmail);
   }
 
+  function keepModalOpen(event: MouseEvent<HTMLDivElement>) {
+    event.stopPropagation();
+  }
+
   return (
     <AnimatePresence>
       {open ? (
@@ -59,6 +63,7 @@ export function AuthModal({
           initial={{ opacity: 0 }}
           animate={{ opacity: 1 }}
           exit={{ opacity: 0 }}
+          onClick={onClose}
         >
           <motion.div
             className="w-full max-w-md overflow-hidden rounded-lg bg-white shadow-xl"
@@ -66,6 +71,7 @@ export function AuthModal({
             animate={{ y: 0, opacity: 1, scale: 1 }}
             exit={{ y: 24, opacity: 0, scale: 0.98 }}
             transition={{ duration: 0.18 }}
+            onClick={keepModalOpen}
           >
             <div className="flex items-start justify-between gap-3 border-b border-[color:var(--border)] p-4">
               <div>
