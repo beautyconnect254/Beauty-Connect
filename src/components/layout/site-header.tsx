@@ -3,7 +3,15 @@
 import Image from "next/image";
 import Link from "next/link";
 import { usePathname } from "next/navigation";
-import { LogOut, UserCircle } from "lucide-react";
+import {
+  CircleHelp,
+  FileText,
+  LogOut,
+  MoreVertical,
+  ReceiptText,
+  ShieldCheck,
+  UserCircle,
+} from "lucide-react";
 import { useState } from "react";
 
 import { ProtectedLink } from "@/components/auth/protected-link";
@@ -18,10 +26,18 @@ const navigation = [
   { href: "/workers", label: "Workers" },
 ];
 
+const utilityLinks = [
+  { href: "/help", label: "Help & FAQs", icon: CircleHelp },
+  { href: "/terms", label: "T&C", icon: FileText },
+  { href: "/privacy", label: "Privacy policy", icon: ShieldCheck },
+  { href: "/refund-policy", label: "Refund Policy", icon: ReceiptText },
+];
+
 export function SiteHeader() {
   const pathname = usePathname();
   const { loading, openAuthModal, signOut, user } = useAuth();
   const [profileOpen, setProfileOpen] = useState(false);
+  const [utilityOpen, setUtilityOpen] = useState(false);
 
   return (
     <header className="sticky top-0 z-50 border-b border-[color:var(--border)] bg-white/95 backdrop-blur">
@@ -100,7 +116,10 @@ export function SiteHeader() {
               <Button
                 size="sm"
                 variant="outline"
-                onClick={() => setProfileOpen((current) => !current)}
+                onClick={() => {
+                  setUtilityOpen(false);
+                  setProfileOpen((current) => !current);
+                }}
               >
                 <UserCircle className="h-4 w-4" />
                 Profile
@@ -138,6 +157,39 @@ export function SiteHeader() {
               Login / Sign Up
             </Button>
           )}
+
+          <Button
+            aria-expanded={utilityOpen}
+            aria-label="Open more menu"
+            size="icon"
+            variant="ghost"
+            onClick={() => {
+              setProfileOpen(false);
+              setUtilityOpen((current) => !current);
+            }}
+          >
+            <MoreVertical className="h-4 w-4" />
+          </Button>
+
+          {utilityOpen ? (
+            <div className="absolute right-0 top-[calc(100%+0.5rem)] w-56 overflow-hidden rounded-lg border border-[color:var(--border)] bg-white p-1.5 shadow-xl">
+              {utilityLinks.map((item) => {
+                const Icon = item.icon;
+
+                return (
+                  <Link
+                    className="flex items-center gap-2 rounded-md px-2.5 py-2 text-sm font-bold text-[color:var(--foreground)] hover:bg-[color:var(--muted)]"
+                    href={item.href}
+                    key={item.href}
+                    onClick={() => setUtilityOpen(false)}
+                  >
+                    <Icon className="h-4 w-4 text-emerald-700" />
+                    {item.label}
+                  </Link>
+                );
+              })}
+            </div>
+          ) : null}
         </div>
       </div>
     </header>

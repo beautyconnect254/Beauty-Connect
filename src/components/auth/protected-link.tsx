@@ -21,10 +21,14 @@ export function ProtectedLink({
   intentDescription,
   intentTitle,
 }: ProtectedLinkProps) {
-  const { requireAuth } = useAuth();
+  const { openAuthModal, user } = useAuth();
 
   function handleClick(event: MouseEvent<HTMLAnchorElement>) {
     if (event.metaKey || event.ctrlKey || event.shiftKey || event.altKey) {
+      return;
+    }
+
+    if (user) {
       return;
     }
 
@@ -34,11 +38,9 @@ export function ProtectedLink({
       title: intentTitle,
       description: intentDescription,
     };
-    const allowed = requireAuth({ intent });
 
-    if (!allowed) {
-      event.preventDefault();
-    }
+    event.preventDefault();
+    openAuthModal(intent);
   }
 
   return (

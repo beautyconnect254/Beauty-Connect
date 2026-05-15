@@ -1,9 +1,6 @@
-"use client";
-
 import Image from "next/image";
 import Link from "next/link";
 import { BriefcaseBusiness, CheckCircle2, MapPin } from "lucide-react";
-import { motion } from "framer-motion";
 
 import { Badge } from "@/components/ui/badge";
 import { Card } from "@/components/ui/card";
@@ -46,10 +43,11 @@ function availabilityClass(status: Worker["availability_status"]) {
 
 export function WorkerCard({ worker, compact = false }: WorkerCardProps) {
   return (
-    <motion.div
-      className="h-full min-w-0"
-      whileHover={{ y: compact ? -2 : -3 }}
-      transition={{ duration: 0.16 }}
+    <div
+      className={cn(
+        "h-full min-w-0 transition-transform duration-150",
+        compact ? "hover:-translate-y-0.5" : "hover:-translate-y-1",
+      )}
     >
       <Card className="h-full min-w-0 overflow-hidden">
         <Link
@@ -124,6 +122,6 @@ export function WorkerCard({ worker, compact = false }: WorkerCardProps) {
           </div>
         </Link>
       </Card>
-    </motion.div>
+    </div>
   );
 }

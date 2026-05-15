@@ -1,18 +1,12 @@
 
 > beauty-connect@0.1.0 dev
-> next dev
+> next dev --port 3000
 
 ▲ Next.js 16.2.6 (Turbopack)
 - Local:         http://localhost:3000
 - Network:       http://192.168.100.63:3000
-- Environments: .env
-✓ Ready in 1497ms
-Creating turbopack project {
-  dir: 'C:\\Users\\KoinangeJr\\beauty-connect\\beauty-connect',
-  testMode: true
-}
+✓ Ready in 3.5s
+Creating turbopack project { dir: 'C:\\Users\\KoinangeJr\\beauty-connect', testMode: true }
 
 ○ Compiling / ...
- GET / 200 in 203ms (next.js: 8ms, application-code: 195ms)
- GET / 200 in 176ms (next.js: 6ms, application-code: 170ms)
-  Reload env: .env
+ GET / 200 in 222ms (next.js: 7ms, application-code: 215ms)

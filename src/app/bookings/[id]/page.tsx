@@ -26,12 +26,33 @@ import { cn } from "@/lib/utils";
 
 interface BookingDetailPageProps {
   params: Promise<{ id: string }>;
+  searchParams: Promise<{ status?: string; type?: string }>;
 }
 
 export const dynamic = "force-dynamic";
 
-export default async function BookingDetailPage({ params }: BookingDetailPageProps) {
+function bookingListHref(type?: string, status?: string) {
+  const params = new URLSearchParams();
+
+  if (type === "team" || type === "worker") {
+    params.set("type", type);
+  }
+
+  if (status === "pending" || status === "confirmed" || status === "paid") {
+    params.set("status", status);
+  }
+
+  const query = params.toString();
+
+  return query ? `/bookings?${query}` : "/bookings";
+}
+
+export default async function BookingDetailPage({
+  params,
+  searchParams,
+}: BookingDetailPageProps) {
   const { id } = await params;
+  const { status, type } = await searchParams;
   const user = await getCurrentUser();
 
   if (!user) {
@@ -58,7 +79,7 @@ export default async function BookingDetailPage({ params }: BookingDetailPagePro
     <SiteShell>
       <div className="mx-auto w-full max-w-5xl space-y-4 px-3 py-5 sm:px-6 lg:px-8 lg:py-8">
         <Link
-          href="/bookings"
+          href={bookingListHref(type, status)}
           className={cn(buttonVariants({ variant: "ghost", size: "sm" }), "px-0")}
         >
           <ArrowLeft className="h-4 w-4" />

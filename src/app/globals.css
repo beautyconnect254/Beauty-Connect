@@ -46,6 +46,28 @@ body {
   overflow-x: hidden;
 }
 
+.bc-reveal {
+  animation: bc-reveal 0.45s cubic-bezier(0.22, 1, 0.36, 1) both;
+}
+
+@keyframes bc-reveal {
+  from {
+    opacity: 0;
+    transform: translateY(12px);
+  }
+
+  to {
+    opacity: 1;
+    transform: translateY(0);
+  }
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .bc-reveal {
+    animation: none;
+  }
+}
+
 a {
   text-decoration: none;
 }

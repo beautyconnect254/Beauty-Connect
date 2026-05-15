@@ -1,6 +1,7 @@
 "use client";
 
-import { useMemo, useState } from "react";
+import { useEffect, useMemo, useState } from "react";
+import { usePathname, useSearchParams } from "next/navigation";
 
 import { BookingCard } from "@/components/bookings/booking-card";
 import type { Booking, BookingStatus, BookingType } from "@/lib/types";
@@ -23,10 +24,62 @@ const bookingTypes: Array<{ value: BookingType; label: string }> = [
   { value: "worker", label: "Single Booking" },
 ];
 
+const BOOKING_TAB_MEMORY_KEY = "bc-bookings-tab-memory";
+
+function isBookingType(value: string | null): value is BookingType {
+  return value === "team" || value === "worker";
+}
+
+function isBookingFilterStatus(
+  value: string | null,
+): value is BookingFilterStatus {
+  return value === "pending" || value === "confirmed" || value === "paid";
+}
+
+function readStoredTabMemory(): {
+  status: BookingFilterStatus | null;
+  type: BookingType | null;
+} | null {
+  if (typeof window === "undefined") {
+    return null;
+  }
+
+  try {
+    const stored = JSON.parse(
+      window.localStorage.getItem(BOOKING_TAB_MEMORY_KEY) ?? "{}",
+    ) as { type?: string; status?: string };
+    const storedType = stored.type ?? null;
+    const storedStatus = stored.status ?? null;
+
+    return {
+      type: isBookingType(storedType) ? storedType : null,
+      status: isBookingFilterStatus(storedStatus) ? storedStatus : null,
+    };
+  } catch {
+    window.localStorage.removeItem(BOOKING_TAB_MEMORY_KEY);
+    return null;
+  }
+}
+
 export function BookingsClient({ bookings }: BookingsClientProps) {
-  const [activeType, setActiveType] = useState<BookingType>("team");
-  const [activeTab, setActiveTab] = useState<BookingFilterStatus>("pending");
+  const pathname = usePathname();
+  const searchParams = useSearchParams();
+  const [activeType, setActiveType] = useState<BookingType>(() => {
+    const queryType = searchParams.get("type");
+    const stored = readStoredTabMemory();
+
+    return isBookingType(queryType) ? queryType : stored?.type ?? "team";
+  });
+  const [activeTab, setActiveTab] = useState<BookingFilterStatus>(() => {
+    const queryStatus = searchParams.get("status");
+    const stored = readStoredTabMemory();
+
+    return isBookingFilterStatus(queryStatus)
+      ? queryStatus
+      : stored?.status ?? "pending";
+  });
   const allBookings = useMemo(() => bookings, [bookings]);
+  const bookingListQuery = `type=${activeType}&status=${activeTab}`;
   const visibleBookings = allBookings.filter((booking) => {
     const matchesStatus =
       activeTab === "confirmed"
@@ -35,6 +88,26 @@ export function BookingsClient({ bookings }: BookingsClientProps) {
 
     return booking.type === activeType && matchesStatus;
   });
+
+  useEffect(() => {
+    window.localStorage.setItem(
+      BOOKING_TAB_MEMORY_KEY,
+      JSON.stringify({ type: activeType, status: activeTab }),
+    );
+
+    const params = new URLSearchParams(searchParams.toString());
+    params.set("type", activeType);
+    params.set("status", activeTab);
+    window.history.replaceState(null, "", `${pathname}?${params.toString()}`);
+  }, [activeTab, activeType, pathname, searchParams]);
+
+  function updateType(type: BookingType) {
+    setActiveType(type);
+  }
+
+  function updateTab(status: BookingFilterStatus) {
+    setActiveTab(status);
+  }
 
   return (
     <div className="space-y-3">
@@ -52,7 +125,7 @@ export function BookingsClient({ bookings }: BookingsClientProps) {
                   : "text-[color:var(--muted-foreground)] hover:bg-[color:var(--muted)]",
               )}
               key={type.value}
-              onClick={() => setActiveType(type.value)}
+              onClick={() => updateType(type.value)}
               type="button"
             >
               <span className="whitespace-nowrap">{type.label}</span>
@@ -93,7 +166,7 @@ export function BookingsClient({ bookings }: BookingsClientProps) {
                   : "text-[color:var(--muted-foreground)] hover:bg-[color:var(--muted)]",
               )}
               key={tab.value}
-              onClick={() => setActiveTab(tab.value)}
+              onClick={() => updateTab(tab.value)}
               type="button"
             >
               <span className="whitespace-nowrap">{tab.label}</span>
@@ -117,6 +190,7 @@ export function BookingsClient({ bookings }: BookingsClientProps) {
           {visibleBookings.map((booking) => (
             <BookingCard
               booking={booking}
+              href={`/bookings/${booking.id}?${bookingListQuery}`}
               interactive
               key={booking.id}
             />

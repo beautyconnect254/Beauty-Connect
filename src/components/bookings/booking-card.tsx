@@ -15,10 +15,15 @@ import { cn, formatCurrency } from "@/lib/utils";
 
 interface BookingCardProps {
   booking: Booking;
+  href?: string;
   interactive?: boolean;
 }
 
-export function BookingCard({ booking, interactive = true }: BookingCardProps) {
+export function BookingCard({
+  booking,
+  href,
+  interactive = true,
+}: BookingCardProps) {
   const workerNames = booking.workers.map((worker) => worker.full_name).join(", ");
   const primaryAssignment = booking.worker_assignments[0];
 
@@ -94,7 +99,7 @@ export function BookingCard({ booking, interactive = true }: BookingCardProps) {
   }
 
   return (
-    <Link href={`/bookings/${booking.id}`} className="block">
+    <Link href={href ?? `/bookings/${booking.id}`} className="block">
       {content}
     </Link>
   );
