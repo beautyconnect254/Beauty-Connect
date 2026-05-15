@@ -14,3 +14,8 @@ Creating turbopack project { dir: 'C:\\Users\\KoinangeJr\\beauty-connect', testM
  GET /help 200 in 2.9s (next.js: 2.6s, application-code: 249ms)
  GET /bookings?type=worker&status=confirmed 200 in 4.9s (next.js: 4.4s, application-code: 554ms)
  GET /hires 200 in 5.5s (next.js: 5.1s, application-code: 452ms)
+✓ Compiled in 684ms
+✓ Compiled in 119ms
+✓ Compiled in 112ms
+✓ Compiled in 646ms
+✓ Compiled in 1215ms

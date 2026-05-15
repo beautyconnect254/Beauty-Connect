@@ -136,8 +136,7 @@ export default async function BookingDetailPage({
             </p>
 
             <p className="rounded-md bg-amber-50 px-3 py-2 text-xs font-bold leading-5 text-amber-900">
-              {bookingStatusDescription(booking.status)} Worker contact details stay locked
-              until payment is verified and the booking moves to Hires.
+              {bookingStatusDescription(booking.status)} After paying check hires for worker&apos;s contacts.
             </p>
           </CardContent>
         </Card>

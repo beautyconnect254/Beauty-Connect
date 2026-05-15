@@ -66,7 +66,7 @@ export function bookingStatusDescription(status: BookingStatus) {
     case "pending":
       return "Beauty Connect is matching workers and manually verifying availability.";
     case "confirmed":
-      return "Workers are selected. They lock only when deposit payment starts.";
+      return "Workers only lock when deposit is paid.";
     case "payment_pending":
       return "Deposit payment is in progress. Workers are reserved while M-Pesa confirms.";
     case "paid":

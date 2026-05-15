@@ -155,8 +155,7 @@ export function BookingPaymentAction({
         <p className="text-xs font-bold leading-5 text-emerald-950">{notice}</p>
       ) : (
         <p className="text-xs font-semibold leading-5 text-emerald-900">
-          Rechecks worker availability, reserves the assignment, then sends an
-          M-Pesa prompt.
+          input your M-Pesa number, press pay deposit, enter pin on STK and youre done!.
         </p>
       )}
     </div>

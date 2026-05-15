@@ -120,7 +120,7 @@ export function HomePage({ featuredWorkers, categories }: HomePageProps) {
               Worker categories
             </p>
             <h2 className="mt-1 text-xl font-extrabold text-[color:var(--foreground)] sm:text-2xl">
-              Start with a role
+              Select a category
             </h2>
           </div>
 
@@ -142,7 +142,7 @@ export function HomePage({ featuredWorkers, categories }: HomePageProps) {
         <Reveal className="mb-3 flex items-end justify-between gap-3">
           <div>
             <p className="text-[11px] font-bold uppercase text-[color:var(--muted-foreground)]">
-              Paid visibility
+              Featured Category
             </p>
             <h2 className="mt-1 text-xl font-extrabold text-[color:var(--foreground)] sm:text-2xl">
               Featured Workers
